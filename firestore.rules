@@ -1,0 +1,87 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId}
+// Fields:
+//   - profile: object (required) - User's physical profile and goals
+//   - nutritionPlan: object (required) - Current nutrition plan and phase settings
+//   - syncSettings: object (required) - Sync mode and metadata
+//
+// Collection: users/{userId}/days
+// Document ID: {date} (YYYY-MM-DD)
+// Fields:
+//   - date: string (required, format: YYYY-MM-DD)
+//   - meals: list (optional) - List of meal objects
+//   - workoutSessions: list (optional) - List of workout session objects
+//   - water: number (optional) - Water intake in ml
+//   - steps: number (optional) - Step count
+//   - weight: number (optional) - Body weight
+//   - bodyFat: number (optional) - Body fat percentage
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "wang13051642569@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$");
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['profile', 'nutritionPlan', 'syncSettings']) &&
+             data.profile is map &&
+             data.nutritionPlan is map &&
+             data.syncSettings is map;
+    }
+
+    function isValidDayData(data) {
+      return data.keys().hasAll(['date']) &&
+             isValidDateString(data.date) &&
+             (!('meals' in data) || data.meals is list) &&
+             (!('workoutSessions' in data) || data.workoutSessions is list) &&
+             (!('water' in data) || data.water is number) &&
+             (!('steps' in data) || data.steps is number) &&
+             (!('weight' in data) || data.weight is number) &&
+             (!('bodyFat' in data) || data.bodyFat is number);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow delete: if isAdmin();
+
+      match /days/{date} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidDayData(request.resource.data);
+        allow update: if isOwner(userId) && isValidDayData(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+  }
+}

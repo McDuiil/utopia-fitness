@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user profile, settings, and nutrition plans.",
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "object",
+          "description": "User's physical profile and goals."
+        },
+        "nutritionPlan": {
+          "type": "object",
+          "description": "Current nutrition plan and phase settings."
+        },
+        "syncSettings": {
+          "type": "object",
+          "description": "Sync mode and metadata."
+        }
+      },
+      "required": ["profile", "nutritionPlan", "syncSettings"]
+    },
+    "DayData": {
+      "title": "Daily Data",
+      "description": "Stores meals, workouts, and metrics for a specific date.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "meals": { "type": "array", "items": { "type": "object" } },
+        "workoutSessions": { "type": "array", "items": { "type": "object" } },
+        "water": { "type": "number" },
+        "steps": { "type": "number" },
+        "weight": { "type": "number" },
+        "bodyFat": { "type": "number" }
+      },
+      "required": ["date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile and settings."
+    },
+    "/users/{userId}/days/{date}": {
+      "schema": "DayData",
+      "description": "Daily tracking data."
+    }
+  }
+}
