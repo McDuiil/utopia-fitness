@@ -94,7 +94,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen w-full max-w-md mx-auto relative overflow-x-hidden no-scrollbar">
+    <div className="h-screen w-full max-w-md mx-auto relative overflow-hidden flex flex-col bg-[#050505]">
       {/* Background Decorative Elements (Orbs) */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-15%] left-[-10%] w-[70%] h-[70%] rounded-full bg-blue-600/20 blur-[140px] animate-pulse" />
@@ -103,8 +103,7 @@ export default function App() {
         <div className="absolute bottom-[20%] left-[-10%] w-[40%] h-[40%] rounded-full bg-cyan-600/10 blur-[80px] animate-pulse" style={{ animationDelay: '1s' }} />
       </div>
 
-      <main className="relative z-0">
-        {/* Removed AnimatePresence to prevent DOM ghosting during rapid clicks */}
+      <main className="flex-1 relative z-0 overflow-y-auto no-scrollbar">
         <motion.div
           key={activeTab}
           className="w-full"
@@ -112,14 +111,14 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ 
             duration: 0.15,
-            ease: [0.23, 1, 0.32, 1] // Fast out-expo
+            ease: [0.23, 1, 0.32, 1] 
           }}
         >
           {renderContent()}
         </motion.div>
+        <div className="h-32" /> {/* Bottom Spacer inside scrollable area */}
       </main>
 
-      <div className="h-32" /> {/* Bottom Spacer for Navigation */}
       <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {/* Weight Prompt Modal */}
