@@ -42,6 +42,8 @@ export default function Workouts() {
   const [editingSession, setEditingSession] = useState<{date: string, session: WorkoutSession} | null>(null);
   const [deletingSession, setDeletingSession] = useState<{date: string, sessionId: string} | null>(null);
   const [showCustomExerciseModal, setShowCustomExerciseModal] = useState(false);
+  const [showCaloriePrompt, setShowCaloriePrompt] = useState(false);
+  const [isEditingExistingSession, setIsEditingExistingSession] = useState(false);
   const [elapsedTime, setElapsedTime] = useState<string>("00:00:00");
 
   // Real-time timer for active session
@@ -76,14 +78,14 @@ export default function Workouts() {
 
   // Body scroll lock
   React.useEffect(() => {
-    const isModalOpen = !!editingSession || !!deletingSession || showCategoryPicker || showExercisePicker || showCustomExerciseModal || showAddCategoryModal;
+    const isModalOpen = !!editingSession || !!deletingSession || showCategoryPicker || showExercisePicker || showCustomExerciseModal || showAddCategoryModal || showCaloriePrompt;
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [editingSession, deletingSession, showCategoryPicker, showExercisePicker, showCustomExerciseModal, showAddCategoryModal]);
+  }, [editingSession, deletingSession, showCategoryPicker, showExercisePicker, showCustomExerciseModal, showAddCategoryModal, showCaloriePrompt]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
@@ -141,11 +143,9 @@ export default function Workouts() {
     
     // Sort by date (descending) then by startTime (descending)
     return history.sort((a, b) => {
-      // First compare by date key (YYYY-MM-DD)
       if (b.date !== a.date) {
         return b.date.localeCompare(a.date);
       }
-      // If same day, compare by startTime
       const timeA = a.session.startTime ? new Date(a.session.startTime).getTime() : 0;
       const timeB = b.session.startTime ? new Date(b.session.startTime).getTime() : 0;
       return timeB - timeA;
@@ -165,6 +165,23 @@ export default function Workouts() {
   };
 
   const addExerciseToSession = (ex: Exercise) => {
+    if (isEditingExistingSession && editingSession) {
+      const sessionEx: WorkoutSessionExercise = {
+        exerciseId: ex.id,
+        name: ex.name[language],
+        sets: [{ reps: 0, weight: 0, isPR: false }]
+      };
+      setEditingSession({
+        ...editingSession,
+        session: {
+          ...editingSession.session,
+          exercises: [...editingSession.session.exercises, sessionEx]
+        }
+      });
+      setShowExercisePicker(false);
+      return;
+    }
+
     if (!activeSession) return;
     const sessionEx: WorkoutSessionExercise = {
       exerciseId: ex.id,
@@ -265,6 +282,7 @@ export default function Workouts() {
 
   const startEditing = (date: string, session: WorkoutSession) => {
     setEditingSession({ date, session: JSON.parse(JSON.stringify(session)) });
+    setIsEditingExistingSession(true);
   };
 
   const saveEditedSession = () => {
@@ -289,6 +307,7 @@ export default function Workouts() {
       }
     });
     setEditingSession(null);
+    setIsEditingExistingSession(false);
   };
 
   const updateEditedSet = (exIdx: number, setIdx: number, field: string, value: any) => {
@@ -321,6 +340,13 @@ export default function Workouts() {
 
   const finishSession = () => {
     if (!activeSession) return;
+    
+    // Calorie Interception: If calories are 0 or empty, force prompt
+    if (!activeSession.calories || activeSession.calories <= 0) {
+      setShowCaloriePrompt(true);
+      return;
+    }
+
     const today = getTodayStr();
     const dayData = appData.days[today] || { date: today, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
     
@@ -342,6 +368,7 @@ export default function Workouts() {
         }
       }
     });
+    setShowCaloriePrompt(false);
   };
 
   const calculateDuration = (start: string, end?: string) => {
@@ -570,7 +597,7 @@ export default function Workouts() {
                         <div className="text-right">
                           <p className="text-sm font-bold text-orange-400">{session.calories} kcal</p>
                           <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                            {calculateDuration(session.startTime, session.endTime)} {t("min")}
+                            {session.manualDuration ?? calculateDuration(session.startTime, session.endTime)} {t("min")}
                           </p>
                         </div>
                         <button 
@@ -688,13 +715,61 @@ export default function Workouts() {
                   <h2 className="text-xl font-bold">{t("editWorkout")}</h2>
                   <p className="text-xs text-white/40">{editingSession.date}</p>
                 </div>
-                <button onClick={() => setEditingSession(null)} className="text-white/40 hover:text-white transition-colors">
+                <button onClick={() => {
+                  setEditingSession(null);
+                  setIsEditingExistingSession(false);
+                }} className="text-white/40 hover:text-white transition-colors">
                   <X size={24} />
                 </button>
               </div>
 
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
+                {/* Enhanced Fields: Category, Calories, Duration */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("workoutCategory")}</label>
+                    <select 
+                      className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10"
+                      value={editingSession.session.category || ""}
+                      onChange={e => setEditingSession({
+                        ...editingSession,
+                        session: { ...editingSession.session, category: e.target.value }
+                      })}
+                    >
+                      <option value="" className="bg-gray-900">{t("all")}</option>
+                      {allCategories.map(cat => (
+                        <option key={cat} value={cat} className="bg-gray-900">{t(cat as any) || cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("calories")} (kcal)</label>
+                    <input 
+                      type="number"
+                      className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10"
+                      value={editingSession.session.calories || ""}
+                      onChange={e => setEditingSession({
+                        ...editingSession,
+                        session: { ...editingSession.session, calories: Number(e.target.value) }
+                      })}
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("duration")} ({t("min")})</label>
+                    <input 
+                      type="number"
+                      placeholder={calculateDuration(editingSession.session.startTime, editingSession.session.endTime).toString()}
+                      className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10"
+                      value={editingSession.session.manualDuration || ""}
+                      onChange={e => setEditingSession({
+                        ...editingSession,
+                        session: { ...editingSession.session, manualDuration: Number(e.target.value) }
+                      })}
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-6">
                   {editingSession.session.exercises.map((ex, exIdx) => (
                     <div key={exIdx} className="space-y-4 rounded-2xl bg-white/5 p-4 border border-white/5">
@@ -759,6 +834,18 @@ export default function Workouts() {
                       </div>
                     </div>
                   ))}
+                  
+                  {/* Add Exercise Button in Edit Modal */}
+                  <button 
+                    onClick={() => {
+                      setIsEditingExistingSession(true);
+                      setShowExercisePicker(true);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 py-4 text-sm font-bold text-white/40 hover:bg-white/5 transition-colors"
+                  >
+                    <Plus size={18} />
+                    {t("addExercise")}
+                  </button>
                 </div>
               </div>
 
@@ -770,6 +857,52 @@ export default function Workouts() {
                 >
                   {t("save")}
                 </button>
+              </div>
+            </GlassCard>
+          </div>
+        )}
+
+        {/* Calorie Interception Modal */}
+        {showCaloriePrompt && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+            <GlassCard className="w-full max-w-sm p-6 space-y-6 border-orange-500/30 bg-black/90 shadow-[0_0_50px_rgba(249,115,22,0.2)]">
+              <div className="text-center space-y-2">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-500/20 text-orange-500">
+                  <Flame size={32} />
+                </div>
+                <h2 className="text-xl font-bold">{t("enterCalories")}</h2>
+                <p className="text-sm text-white/40">{t("calorieRequiredHint") || "Please enter calories burned to end workout"}</p>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    inputMode="decimal"
+                    autoFocus
+                    placeholder="0"
+                    className="w-full rounded-2xl bg-white/5 py-5 text-center text-4xl font-bold outline-none ring-1 ring-white/10 focus:ring-orange-500"
+                    value={activeSession?.calories || ""}
+                    onChange={e => setActiveSession(activeSession ? {...activeSession, calories: Number(e.target.value)} : null)}
+                  />
+                  <span className="absolute right-6 top-1/2 -translate-y-1/2 text-sm font-bold text-white/20">kcal</span>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setShowCaloriePrompt(false)}
+                    className="flex-1 rounded-2xl bg-white/5 py-4 font-bold text-white/60 transition-colors hover:bg-white/10"
+                  >
+                    {t("cancel")}
+                  </button>
+                  <button 
+                    onClick={finishSession}
+                    disabled={!activeSession?.calories || activeSession.calories <= 0}
+                    className="flex-1 rounded-2xl bg-orange-500 py-4 font-bold text-white shadow-lg shadow-orange-500/20 active:scale-95 transition-transform disabled:opacity-50 disabled:active:scale-100"
+                  >
+                    {t("confirm")}
+                  </button>
+                </div>
               </div>
             </GlassCard>
           </div>
@@ -890,7 +1023,12 @@ export default function Workouts() {
           <div className="flex items-center justify-between px-6 pb-4 pt-[calc(2.5rem+env(safe-area-inset-top,0px))]">
             <h2 className="text-3xl font-bold tracking-tight">{t("addExercise")}</h2>
             <button 
-              onClick={() => setShowExercisePicker(false)} 
+              onClick={() => {
+                setShowExercisePicker(false);
+                if (isEditingExistingSession) {
+                  // Keep isEditingExistingSession true so we return to edit modal
+                }
+              }} 
               className="apple-button h-10 w-10 bg-white/10 text-white/80"
             >
               <X size={20} />
@@ -1009,39 +1147,39 @@ export default function Workouts() {
               </button>
             </div>
             
-                    <div className="space-y-5">
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                          <Dumbbell size={12} className="text-blue-400" />
-                          {t("exerciseName")}
-                        </label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. Bench Press"
-                          className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
-                          value={newExercise.name?.zh}
-                          onChange={e => setNewExercise({...newExercise, name: { en: e.target.value, zh: e.target.value }})}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                          <LayoutDashboard size={12} className="text-purple-400" />
-                          {t("filterByPart")}
-                        </label>
-                        <div className="relative">
-                          <select 
-                            className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none appearance-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
-                            value={newExercise.part}
-                            onChange={e => setNewExercise({...newExercise, part: e.target.value as any})}
-                          >
-                            {allCategories.map(p => (
-                              <option key={p} value={p} className="bg-gray-900">{t(p as any) || p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                            ))}
-                          </select>
-                          <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none text-white/20" />
-                        </div>
-                      </div>
-                    </div>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                  <Dumbbell size={12} className="text-blue-400" />
+                  {t("exerciseName")}
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Bench Press"
+                  className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
+                  value={newExercise.name?.zh}
+                  onChange={e => setNewExercise({...newExercise, name: { en: e.target.value, zh: e.target.value }})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                  <LayoutDashboard size={12} className="text-purple-400" />
+                  {t("filterByPart")}
+                </label>
+                <div className="relative">
+                  <select 
+                    className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none appearance-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
+                    value={newExercise.part}
+                    onChange={e => setNewExercise({...newExercise, part: e.target.value as any})}
+                  >
+                    {allCategories.map(p => (
+                      <option key={p} value={p} className="bg-gray-900">{t(p as any) || p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                    ))}
+                  </select>
+                  <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none text-white/20" />
+                </div>
+              </div>
+            </div>
 
             <button 
               onClick={handleAddCustomExercise}
