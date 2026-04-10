@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Activity, Flame, Footprints, Droplets, Plus, Play, Utensils, Settings, X, Check, AlertCircle } from "lucide-react";
+import { Activity, Flame, Footprints, Droplets, Plus, Play, Utensils, Settings, X, Check, AlertCircle, Award } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useApp } from "@/src/context/AppContext";
@@ -21,6 +21,43 @@ export default function Dashboard() {
   const bmr = calculateBMR(appData.profile);
   const workoutCalories = (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0);
   
+  // Streak Calculation Logic (Workout-based)
+  const calculateStreak = () => {
+    let currentStreak = 0;
+    const todayStr = getTodayStr();
+    let checkDate = new Date();
+    
+    // Check today first
+    const todayData = appData.days[todayStr];
+    const hasWorkoutToday = todayData?.workoutSessions?.some(s => !s.deleted && s.exercises && s.exercises.length > 0);
+    
+    if (hasWorkoutToday) {
+      currentStreak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      // If no workout today, start checking from yesterday
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    // Check backwards consecutively
+    while (true) {
+      const dateStr = checkDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
+      const day = appData.days[dateStr];
+      const hasWorkout = day?.workoutSessions?.some(s => !s.deleted && s.exercises && s.exercises.length > 0);
+
+      if (hasWorkout) {
+        currentStreak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+      
+      if (currentStreak > 3650) break; // Safety break
+    }
+    return currentStreak;
+  };
+
+  const streak = calculateStreak();
   const totalBurned = bmr + workoutCalories;
   const dailyDeficit = totalBurned - resolvedNutritionToday.calories.consumed;
 
@@ -67,7 +104,6 @@ export default function Dashboard() {
     if (currentIndex === -1 || currentIndex === dates.length - 1) return null;
     
     const prevDateWithWeight = dates.slice(currentIndex + 1).find(d => appData.days[d].weight);
-    console.log("Current date:", selectedDate, "Weight:", dayData.weight, "Prev date with weight:", prevDateWithWeight, "Prev weight:", prevDateWithWeight ? appData.days[prevDateWithWeight].weight : 'N/A');
     if (!prevDateWithWeight || !dayData.weight) return null;
     
     const diff = dayData.weight - (appData.days[prevDateWithWeight].weight || 0);
@@ -88,7 +124,6 @@ export default function Dashboard() {
 
   const weightHistoryData = getWeightHistory();
   const weightTrend = getWeightTrend();
-  const calorieGoal = appData.profile?.customCalorieGoal || 2400;
 
   const handleSaveWeight = () => {
     const day = appData.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
@@ -319,13 +354,34 @@ export default function Dashboard() {
           </GlassCard>
         )}
 
+        {isEnabled('streak') && (
+          <GlassCard className="flex flex-col items-center text-center gap-2 p-4 border-yellow-500/20 bg-yellow-500/5" delay={0.22}>
+            <div className="flex flex-col items-center justify-center w-full text-yellow-500 gap-1">
+              <div className="flex items-center gap-2">
+                <Award size={16} />
+                <span className="text-[10px] font-bold uppercase tracking-widest">{t("streak")}</span>
+              </div>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-bold">{streak}</span>
+              <span className="text-xs text-white/40 dark:text-white/40 light:text-black/40">{t("days") || "d"}</span>
+            </div>
+            <p className="text-[10px] text-white/40 dark:text-white/40 light:text-black/40">{streak > 0 ? t("keepGoing") || "Keep it up!" : t("startToday") || "Start today!"}</p>
+            <div className="h-1 w-full rounded-full bg-white/10 dark:bg-white/10 light:bg-black/5 mt-auto">
+              <div 
+                className="h-full rounded-full bg-yellow-500 transition-all duration-500" 
+                style={{ width: `${Math.min(100, (streak / 7) * 100)}%` }}
+              />
+            </div>
+          </GlassCard>
+        )}
+
         {isEnabled('bodyFat') && (
           <GlassCard 
             className="flex flex-col items-center text-center gap-2 p-4 border-pink-500/20 bg-pink-500/5 cursor-pointer active:scale-95 transition-transform" 
             delay={0.25}
             onClick={() => {
               setActiveTab('profile');
-              // We'll trigger the BF history modal in Profile.tsx
             }}
           >
             <div className="flex flex-col items-center justify-center w-full text-pink-400 gap-1">
@@ -458,7 +514,6 @@ export default function Dashboard() {
       {isEnabled('water') && (
         <div className="px-4">
           <GlassCard className="flex items-center justify-between p-4 overflow-hidden relative" delay={0.4}>
-            {/* Water Wave Background Effect */}
             <div 
               className="absolute bottom-0 left-0 right-0 bg-blue-500/10 transition-all duration-1000 ease-out z-0 pointer-events-none"
               style={{ height: `${Math.min(100, ((dayData.water || 0) / 2500) * 100)}%` }}
@@ -597,6 +652,7 @@ export default function Dashboard() {
                 { id: 'bodyFat', label: t("bodyFat") },
                 { id: 'calories', label: t("calories") },
                 { id: 'deficit', label: t("deficitWidget") },
+                { id: 'streak', label: t("streak") },
                 { id: 'activity', label: t("activityWidget") },
                 { id: 'water', label: t("waterWidget") },
                 { id: 'quickWorkout', label: t("quickWorkoutWidget") },
