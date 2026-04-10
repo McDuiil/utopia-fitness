@@ -13,15 +13,17 @@ import { getTodayStr } from "./lib/utils";
 export default function App() {
   const { appData, setAppData, t, activeTab, setActiveTab } = useApp();
   const [showWeightPrompt, setShowWeightPrompt] = useState(false);
-  const [tempWeight, setTempWeight] = useState("");
-  const [tempBodyFat, setTempBodyFat] = useState("");
+  const [tempWeight, setTempWeight] = useState<string>("");
+  const [tempBodyFat, setTempBodyFat] = useState<string>("");
 
+  /* 路由/会话恢复逻辑 */
   useEffect(() => {
     if (appData.activeWorkoutSession && activeTab === 'dashboard') {
       setActiveTab('workouts');
     }
-  }, []);
+  }, [appData.activeWorkoutSession, activeTab, setActiveTab]);
 
+  /* 每日体重提醒逻辑 */
   useEffect(() => {
     const today = getTodayStr();
     const hasWeightToday = appData.days[today]?.weight;
@@ -31,7 +33,7 @@ export default function App() {
       setTempBodyFat(appData.profile.bodyFat.toString());
       sessionStorage.setItem('weightPromptShown', 'true');
     }
-  }, [appData.days]);
+  }, [appData.days, appData.profile.weight, appData.profile.bodyFat]);
 
   const handleSaveWeight = () => {
     const today = getTodayStr();
@@ -47,7 +49,11 @@ export default function App() {
         meals: [], workoutSessions: []
       };
     } else {
-      updatedDays[today] = { ...updatedDays[today], weight: weightNum, bodyFat: isNaN(bodyFatNum) ? updatedDays[today].bodyFat : bodyFatNum };
+      updatedDays[today] = { 
+        ...updatedDays[today], 
+        weight: weightNum, 
+        bodyFat: isNaN(bodyFatNum) ? updatedDays[today].bodyFat : bodyFatNum 
+      };
     }
 
     setAppData({
@@ -69,7 +75,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen w-full relative flex flex-col selection:bg-blue-500/30">
+    <div className="min-h-screen w-full relative flex flex-col bg-[#050505] selection:bg-blue-500/30">
+      {/* 背景装饰层 - 锁死 z-0 */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="absolute top-[-15%] left-[-10%] w-[70%] h-[70%] rounded-full bg-blue-600/20 blur-[100px] animate-pulse" />
         <div className="absolute bottom-[-10%] right-[-15%] w-[60%] h-[60%] rounded-full bg-purple-600/20 blur-[90px] animate-pulse" style={{ animationDelay: '2s' }} />
@@ -77,6 +84,7 @@ export default function App() {
         <div className="absolute bottom-[20%] left-[-10%] w-[40%] h-[40%] rounded-full bg-cyan-600/10 blur-[70px] animate-pulse" style={{ animationDelay: '1s' }} />
       </div>
 
+      {/* 内容承载层 - 锁死 z-10 确保交互正常 */}
       <div className="w-full max-w-md mx-auto relative min-h-screen flex flex-col z-10">
         <main className="flex-1 relative overflow-y-auto no-scrollbar px-4">
           <motion.div
@@ -93,6 +101,7 @@ export default function App() {
         <Navigation activeTab={activeTab} setActiveTab={setActiveTab} />
       </div>
 
+      {/* 体重弹窗层 - 锁死 z-[200] */}
       {showWeightPrompt && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <GlassCard className="w-full max-w-sm space-y-4 border-white/20 bg-black/80">
@@ -124,7 +133,7 @@ export default function App() {
                   onKeyDown={e => e.key === 'Enter' && handleSaveWeight()}
                 />
               </div>
-              <button onClick={handleSaveWeight} className="w-full rounded-2xl bg-blue-500 py-4 text-sm font-bold text-white shadow-lg shadow-blue-500/20">
+              <button onClick={handleSaveWeight} className="w-full rounded-2xl bg-blue-500 py-4 text-sm font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-transform">
                 {t("save")}
               </button>
             </div>
