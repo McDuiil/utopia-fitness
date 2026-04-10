@@ -54,6 +54,7 @@ export interface WorkoutSession {
   exercises: WorkoutSessionExercise[];
   calories: number;
   category?: string;
+  manualDuration?: number;
   updatedAt?: number;
   deleted?: boolean;
   archived?: boolean;
@@ -122,6 +123,7 @@ export interface DayData {
   bodyFat?: number;
   meals: CustomMeal[];
   workoutSessions: WorkoutSession[];
+  manualDayType?: 'training' | 'rest';
 }
 
 export interface SyncSettings {
