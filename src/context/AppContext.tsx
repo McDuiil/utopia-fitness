@@ -282,14 +282,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       baseGoal = currentDayType === 'training' ? fallback.trainingDay : fallback.restDay;
     }
 
-    // 4. Dynamic Goal (Exercise Compensation)
-    const exerciseBurn = (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0);
-    // Simple compensation: add extra carbs for exercise burn (4kcal/g)
-    const extraCarbs = Math.round(exerciseBurn / 4);
-    const dynamicGoal: MacroGrams = {
-      ...baseGoal,
-      carbs: baseGoal.carbs + extraCarbs
-    };
+    // 4. Dynamic Goal (No Exercise Compensation - Fixed)
+    // Exercise compensation has been removed to keep the goal stable
+    // Users can manually add extra meals if they want to compensate for exercise
+    const dynamicGoal: MacroGrams = { ...baseGoal };
 
     // 5. Consumed
     const consumed: MacroGrams = (dayData.meals || []).filter(m => !m.deleted).reduce((acc, meal) => ({
