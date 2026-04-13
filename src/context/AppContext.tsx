@@ -326,11 +326,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     // 7. Calories
+    const consumedCalories = (dayData.meals || []).filter(m => !m.deleted).reduce((acc, meal) => {
+      return acc + (meal.calories || calcCalories(meal.protein, meal.carbs, meal.fat));
+    }, 0);
+
     const calories = {
       baseGoal: baseGoal.calories || calcCalories(baseGoal.protein, baseGoal.carbs, baseGoal.fat),
       dynamicGoal: dynamicGoal.calories || calcCalories(dynamicGoal.protein, dynamicGoal.carbs, dynamicGoal.fat),
-      consumed: calcCalories(consumed.protein, consumed.carbs, consumed.fat),
-      remaining: (dynamicGoal.calories || calcCalories(dynamicGoal.protein, dynamicGoal.carbs, dynamicGoal.fat)) - calcCalories(consumed.protein, consumed.carbs, consumed.fat)
+      consumed: consumedCalories,
+      remaining: (dynamicGoal.calories || calcCalories(dynamicGoal.protein, dynamicGoal.carbs, dynamicGoal.fat)) - consumedCalories
     };
 
     // 8. Percentage
