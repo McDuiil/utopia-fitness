@@ -64,6 +64,7 @@ export interface MacroGrams {
   protein: number;
   carbs: number;
   fat: number;
+  calories?: number;
 }
 
 export interface DayTypeConfig {
@@ -71,12 +72,18 @@ export interface DayTypeConfig {
   restDay: MacroGrams;
 }
 
+export interface CarbCyclingConfig {
+  high: MacroGrams;
+  medium: MacroGrams;
+  low: MacroGrams;
+}
+
 export interface NutritionSettings {
   mode: 'standard' | 'carb-cycling' | 'cut-phases';
   startDate: string;
   manualPhase?: number;
   standard: DayTypeConfig;
-  carbCycling: DayTypeConfig;
+  carbCycling: CarbCyclingConfig;
   cutPhases: DayTypeConfig[];
 }
 
@@ -102,6 +109,7 @@ export interface ResolvedNutritionToday {
     currentPhase: number;
     dayTypeSource: 'manual' | 'auto' | 'session';
     phaseSource: 'manual' | 'auto';
+    currentCarbDay?: 'high' | 'medium' | 'low';
   };
 }
 
@@ -124,6 +132,7 @@ export interface DayData {
   meals: CustomMeal[];
   workoutSessions: WorkoutSession[];
   manualDayType?: 'training' | 'rest';
+  manualCarbDay?: 'high' | 'medium' | 'low';
 }
 
 export interface SyncSettings {
