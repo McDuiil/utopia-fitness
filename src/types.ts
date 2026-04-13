@@ -18,8 +18,8 @@ export interface Profile {
 }
 
 export interface Ingredient {
-  n: string; // 名称
-  a: string; // 份量/数量
+  n: string; // name
+  a: string; // amount
 }
 
 export interface CustomMeal {
@@ -33,76 +33,6 @@ export interface CustomMeal {
   updatedAt?: number;
   deleted?: boolean;
   archived?: boolean;
-}
-
-export interface MacroGrams {
-  protein: number;
-  carbs: number;
-  fat: number;
-}
-
-// 基础营养设置的单项配置
-export interface DayTypeConfig extends MacroGrams {
-  isAuto: boolean;
-}
-
-// 饮食方案导入后的具体配置
-export interface DayTypeData {
-  goal: MacroGrams;
-  meals: SuggestedMeal[];
-}
-
-export interface NutritionSettings {
-  mode: 'standard' | 'carb-cycling' | 'cut-phases';
-  startDate: string;
-  manualPhase?: number;
-  standard: DayTypeConfig;
-  carbCycling: DayTypeConfig; // 基础配置
-  cutPhases: DayTypeConfig[]; // 渐降阶段配置数组
-}
-
-export interface ResolvedNutritionToday extends MacroGrams {
-  baseGoal: MacroGrams;
-  dynamicGoal: MacroGrams;
-  consumed: MacroGrams;
-  remaining: MacroGrams;
-  calories: {
-    baseGoal: number;
-    dynamicGoal: number;
-    consumed: number;
-    remaining: number;
-  };
-  percentage: {
-    protein: number;
-    carbs: number;
-    fat: number;
-    calories: number;
-  };
-  metadata: {
-    currentDayType: string; // 'training' | 'rest' | 'high' | 'medium' | 'low'
-    currentPhase: number;
-    dayTypeSource: 'manual' | 'auto' | 'session';
-    phaseSource: 'manual' | 'auto';
-  };
-  source: 'standard' | 'carb-cycling' | 'cut-phases' | 'auto';
-}
-
-export interface Exercise {
-  id: string;
-  name: { en: string; zh: string };
-  part: string;
-  equipment: string;
-  image: string;
-}
-
-export interface FoodItem {
-  id: string;
-  name: string;
-  brand?: string;
-  state: 'raw' | 'cooked';
-  nutrientsPer100g: MacroGrams;
-  userOverride: boolean;
-  source: 'api' | 'local' | 'user';
 }
 
 export interface WorkoutSet {
@@ -124,6 +54,65 @@ export interface WorkoutSession {
   exercises: WorkoutSessionExercise[];
   calories: number;
   category?: string;
+  manualDuration?: number;
+  updatedAt?: number;
+  deleted?: boolean;
+  archived?: boolean;
+}
+
+export interface MacroGrams {
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export interface DayTypeConfig {
+  trainingDay: MacroGrams;
+  restDay: MacroGrams;
+}
+
+export interface NutritionSettings {
+  mode: 'standard' | 'carb-cycling' | 'cut-phases';
+  startDate: string;
+  manualPhase?: number;
+  standard: DayTypeConfig;
+  carbCycling: DayTypeConfig;
+  cutPhases: DayTypeConfig[];
+}
+
+export interface ResolvedNutritionToday {
+  baseGoal: MacroGrams;
+  dynamicGoal: MacroGrams;
+  consumed: MacroGrams;
+  remaining: MacroGrams;
+  calories: {
+    baseGoal: number;
+    dynamicGoal: number;
+    consumed: number;
+    remaining: number;
+  };
+  percentage: {
+    protein: number;
+    carbs: number;
+    fat: number;
+    calories: number;
+  };
+  metadata: {
+    currentDayType: 'training' | 'rest';
+    currentPhase: number;
+    dayTypeSource: 'manual' | 'auto' | 'session';
+    phaseSource: 'manual' | 'auto';
+  };
+}
+
+export interface FoodItem {
+  id: string;
+  name: string;
+  brand?: string;
+  state: 'raw' | 'cooked';
+  nutrientsPer100g: MacroGrams;
+  userOverride: boolean;
+  source: 'api' | 'local' | 'user';
 }
 
 export interface DayData {
@@ -134,7 +123,7 @@ export interface DayData {
   bodyFat?: number;
   meals: CustomMeal[];
   workoutSessions: WorkoutSession[];
-  manualDayType?: 'training' | 'rest' | 'high' | 'medium' | 'low';
+  manualDayType?: 'training' | 'rest';
 }
 
 export interface SyncSettings {
@@ -154,11 +143,10 @@ export interface SuggestedMeal {
   ingredients: Ingredient[];
 }
 
-// 核心重构：支持阶段+多日型
 export interface DietTemplate {
   phase: number;
-  name?: string;
-  days: Record<string, DayTypeData>; 
+  trainingMeals: SuggestedMeal[];
+  restMeals: SuggestedMeal[];
 }
 
 export interface DietPlan {
@@ -178,5 +166,15 @@ export interface AppData {
   foodLibrary: FoodItem[];
   customCategories?: string[];
   enabledWidgets: string[];
+  categoryImages: { [key: string]: string };
   syncSettings: SyncSettings;
+  activeWorkoutSession?: WorkoutSession | null;
+}
+
+export interface Exercise {
+  id: string;
+  name: { en: string; zh: string };
+  part: string;
+  equipment: string;
+  image: string;
 }
