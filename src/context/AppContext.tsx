@@ -49,7 +49,7 @@ const defaultProfile: Profile = {
 };
 
 const initialData: AppData = {
-  version: 5,
+  version: 6,
   profile: defaultProfile,
   nutritionSettings: {
     mode: 'standard',
@@ -59,8 +59,9 @@ const initialData: AppData = {
       restDay: { protein: 160, carbs: 100, fat: 80 }
     },
     carbCycling: {
-      trainingDay: { protein: 160, carbs: 300, fat: 40 },
-      restDay: { protein: 160, carbs: 50, fat: 90 }
+      high: { protein: 160, carbs: 350, fat: 40, calories: 2400 },
+      medium: { protein: 160, carbs: 200, fat: 60, calories: 2000 },
+      low: { protein: 160, carbs: 50, fat: 80, calories: 1600 }
     },
     cutPhases: [
       { trainingDay: { protein: 180, carbs: 200, fat: 50 }, restDay: { protein: 180, carbs: 100, fat: 60 } },
@@ -128,18 +129,39 @@ const migrateData = (data: any): AppData => {
   if (parsed.profile.useCustomBMR === undefined) parsed.profile.useCustomBMR = false;
   if (parsed.profile.customBMR === null || parsed.profile.customBMR === undefined) parsed.profile.customBMR = 1558;
 
-  // 2. Nutrition Settings Migration (Version 5)
+  // 2. Nutrition Settings Migration (Version 6)
   if (!parsed.nutritionSettings) {
     console.log("Initializing nutrition settings...");
     parsed.nutritionSettings = { ...initialData.nutritionSettings };
-  } else if (parsed.version < 5) {
-    console.log("Upgrading nutrition settings to version 5...");
+  } else if (parsed.version < 6) {
+    console.log("Upgrading nutrition settings to version 6...");
     // Merge existing settings with new structure to avoid complete reset
+    const oldCarbCycling = parsed.nutritionSettings.carbCycling;
+    let newCarbCycling = initialData.nutritionSettings.carbCycling;
+    
+    if (oldCarbCycling && (oldCarbCycling as any).trainingDay) {
+      // Migrate from old trainingDay/restDay to high/medium/low
+      newCarbCycling = {
+        high: (oldCarbCycling as any).trainingDay,
+        medium: (oldCarbCycling as any).trainingDay, // Fallback
+        low: (oldCarbCycling as any).restDay
+      };
+    } else if (oldCarbCycling && !oldCarbCycling.high) {
+      // If it's an object but doesn't have the new keys, it's likely the old structure
+      newCarbCycling = {
+        high: (oldCarbCycling as any).trainingDay || initialData.nutritionSettings.carbCycling.high,
+        medium: (oldCarbCycling as any).trainingDay || initialData.nutritionSettings.carbCycling.medium,
+        low: (oldCarbCycling as any).restDay || initialData.nutritionSettings.carbCycling.low
+      };
+    } else if (oldCarbCycling) {
+      newCarbCycling = { ...newCarbCycling, ...oldCarbCycling };
+    }
+
     parsed.nutritionSettings = {
       ...initialData.nutritionSettings,
       ...parsed.nutritionSettings,
       standard: parsed.nutritionSettings.standard || initialData.nutritionSettings.standard,
-      carbCycling: parsed.nutritionSettings.carbCycling || initialData.nutritionSettings.carbCycling,
+      carbCycling: newCarbCycling,
       cutPhases: parsed.nutritionSettings.cutPhases || initialData.nutritionSettings.cutPhases
     };
     
@@ -152,7 +174,7 @@ const migrateData = (data: any): AppData => {
   }
   
   // Ensure version is set to current
-  parsed.version = 5;
+  parsed.version = 6;
 
   // 3. Days Data Migration (Remove stored calories)
   const migratedDays: { [date: string]: DayData } = {};
@@ -193,7 +215,7 @@ const migrateData = (data: any): AppData => {
     });
   }
 
-  parsed.version = 5;
+  parsed.version = 6;
   return parsed as AppData;
 };
 
@@ -266,11 +288,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // 3. Get Base Goal
     let baseGoal: MacroGrams = { protein: 0, carbs: 0, fat: 0 };
+    let currentCarbDay: 'high' | 'medium' | 'low' | undefined = undefined;
     
     if (settings.mode === 'standard') {
       baseGoal = currentDayType === 'training' ? settings.standard.trainingDay : settings.standard.restDay;
     } else if (settings.mode === 'carb-cycling') {
-      baseGoal = currentDayType === 'training' ? settings.carbCycling.trainingDay : settings.carbCycling.restDay;
+      currentCarbDay = dayData.manualCarbDay || 'medium';
+      baseGoal = settings.carbCycling[currentCarbDay] || settings.carbCycling.medium;
     } else if (settings.mode === 'cut-phases') {
       const phaseConfig = settings.cutPhases[currentPhase] || settings.cutPhases[0] || { trainingDay: { protein: 0, carbs: 0, fat: 0 }, restDay: { protein: 0, carbs: 0, fat: 0 } };
       baseGoal = currentDayType === 'training' ? phaseConfig.trainingDay : phaseConfig.restDay;
@@ -303,10 +327,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // 7. Calories
     const calories = {
-      baseGoal: calcCalories(baseGoal.protein, baseGoal.carbs, baseGoal.fat),
-      dynamicGoal: calcCalories(dynamicGoal.protein, dynamicGoal.carbs, dynamicGoal.fat),
+      baseGoal: baseGoal.calories || calcCalories(baseGoal.protein, baseGoal.carbs, baseGoal.fat),
+      dynamicGoal: dynamicGoal.calories || calcCalories(dynamicGoal.protein, dynamicGoal.carbs, dynamicGoal.fat),
       consumed: calcCalories(consumed.protein, consumed.carbs, consumed.fat),
-      remaining: calcCalories(remaining.protein, remaining.carbs, remaining.fat)
+      remaining: (dynamicGoal.calories || calcCalories(dynamicGoal.protein, dynamicGoal.carbs, dynamicGoal.fat)) - calcCalories(consumed.protein, consumed.carbs, consumed.fat)
     };
 
     // 8. Percentage
@@ -329,7 +353,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         currentDayType,
         currentPhase,
         dayTypeSource,
-        phaseSource
+        phaseSource,
+        currentCarbDay
       }
     };
   }, [appData.nutritionSettings, appData.days, selectedDate, sessionDayType]);
