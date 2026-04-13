@@ -19,7 +19,10 @@ export interface Profile {
 
 export interface Ingredient {
   n: string; // name
-  a: string; // amount
+  a: string; // amount (weight in grams)
+  p: number; // protein
+  c: number; // carbs
+  f: number; // fat
 }
 
 export interface CustomMeal {
@@ -28,6 +31,7 @@ export interface CustomMeal {
   protein: number;
   carbs: number;
   fat: number;
+  calories?: number;
   time: string;
   ingredients?: Ingredient[];
   updatedAt?: number;
