@@ -202,6 +202,8 @@ export const translations = {
     meals: "Meals",
     close: "Close",
     quantity: "Quantity",
+    weightGrams: "Weight (g)",
+    manualCalories: "Manual Calories",
   },
   zh: {
     dashboard: "仪表盘",
@@ -406,5 +408,7 @@ export const translations = {
     meals: "餐次",
     close: "关闭",
     quantity: "数量",
+    weightGrams: "重量 (克)",
+    manualCalories: "手动热量",
   }
 };
