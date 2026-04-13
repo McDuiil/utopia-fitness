@@ -504,7 +504,7 @@ export default function Nutrition() {
               setSettingsDraft(appData.nutritionSettings);
               setShowSettings(true);
             }}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/60 hover:bg-white/20 hover:text-white transition-all"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.06] text-white/60 hover:bg-white/[0.08] hover:text-white transition-all"
           >
             <Settings size={20} />
           </button>
@@ -535,7 +535,7 @@ export default function Nutrition() {
             <div className="flex gap-2">
               <button 
                 onClick={() => setIsPhaseReminderDismissed(true)}
-                className="rounded-lg bg-white/5 px-3 py-2 text-[10px] font-bold uppercase text-white/40"
+                className="rounded-lg bg-white/[0.06] px-3 py-2 text-[10px] font-bold uppercase text-white/40"
               >
                 忽略
               </button>
@@ -557,8 +557,8 @@ export default function Nutrition() {
 
       {/* Nutrition Settings Modal (Replaces Ratio Editor) */}
       {showSettings && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 pb-24 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 max-h-[85vh] shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 pb-24 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 max-h-[85vh] shadow-2xl flex flex-col overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             {/* Header */}
             <div className="p-6 pb-4 border-b border-white/5 flex items-center justify-between">
               <div className="space-y-1">
@@ -587,7 +587,7 @@ export default function Nutrition() {
                   <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{t("dietPlan" as any) || "Diet Plan"}</p>
                   <div className="flex gap-2">
                     <select 
-                      className="flex-1 rounded-xl bg-white/5 p-3 text-xs font-bold outline-none border border-white/5"
+                      className="flex-1 rounded-xl bg-white/[0.06] p-3 text-xs font-bold outline-none border border-white/5"
                       value={appData.activeDietPlanId || ""}
                       onChange={(e) => setAppData({ ...appData, activeDietPlanId: e.target.value })}
                     >
@@ -624,7 +624,7 @@ export default function Nutrition() {
                     key={m}
                     onClick={() => setSettingsDraft({ ...settingsDraft, mode: m })}
                     className={`flex-1 rounded-xl py-2 text-[10px] font-bold uppercase transition-all ${
-                      settingsDraft.mode === m ? "bg-white text-black" : "bg-white/5 text-white/40"
+                      settingsDraft.mode === m ? "bg-white text-black" : "bg-white/[0.06] text-white/40"
                     }`}
                   >
                     {t(m as any)}
@@ -633,7 +633,7 @@ export default function Nutrition() {
               </div>
 
               {/* Input Mode Toggle */}
-              <div className="flex items-center justify-between rounded-xl bg-white/5 p-1">
+              <div className="flex items-center justify-between rounded-xl bg-white/[0.06] p-1">
                 <button 
                   onClick={() => setInputMode('grams')}
                   className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold uppercase transition-all ${inputMode === 'grams' ? "bg-white/10 text-white" : "text-white/20"}`}
@@ -651,7 +651,7 @@ export default function Nutrition() {
               {/* Settings Content */}
               <div className="space-y-6">
                 {/* Standard / Carb Cycling Config */}
-                {(settingsDraft.mode === 'standard' || settingsDraft.mode === 'carb-cycling') && (
+                {settingsDraft.mode === 'standard' && (
                   <div className="space-y-6">
                     {/* Training Day */}
                     <div className="space-y-3">
@@ -660,12 +660,11 @@ export default function Nutrition() {
                         <h3 className="text-xs font-bold uppercase tracking-widest">{t("trainingDayConfig")}</h3>
                       </div>
                       <MacroInputGrid 
-                        config={settingsDraft.mode === 'standard' ? settingsDraft.standard.trainingDay : settingsDraft.carbCycling.trainingDay}
+                        config={settingsDraft.standard?.trainingDay}
                         onChange={(val) => {
-                          const key = settingsDraft.mode === 'standard' ? 'standard' : 'carbCycling';
                           setSettingsDraft({
                             ...settingsDraft,
-                            [key]: { ...settingsDraft[key], trainingDay: val }
+                            standard: { ...settingsDraft.standard, trainingDay: val }
                           });
                         }}
                         mode={inputMode}
@@ -678,12 +677,67 @@ export default function Nutrition() {
                         <h3 className="text-xs font-bold uppercase tracking-widest">{t("restDayConfig")}</h3>
                       </div>
                       <MacroInputGrid 
-                        config={settingsDraft.mode === 'standard' ? settingsDraft.standard.restDay : settingsDraft.carbCycling.restDay}
+                        config={settingsDraft.standard?.restDay}
                         onChange={(val) => {
-                          const key = settingsDraft.mode === 'standard' ? 'standard' : 'carbCycling';
                           setSettingsDraft({
                             ...settingsDraft,
-                            [key]: { ...settingsDraft[key], restDay: val }
+                            standard: { ...settingsDraft.standard, restDay: val }
+                          });
+                        }}
+                        mode={inputMode}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {settingsDraft.mode === 'carb-cycling' && (
+                  <div className="space-y-6">
+                    {/* High Carb */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-red-400">
+                        <Zap size={14} />
+                        <h3 className="text-xs font-bold uppercase tracking-widest">{t("highCarbDay")}</h3>
+                      </div>
+                      <MacroInputGrid 
+                        config={settingsDraft.carbCycling?.high}
+                        onChange={(val) => {
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            carbCycling: { ...settingsDraft.carbCycling, high: val }
+                          });
+                        }}
+                        mode={inputMode}
+                      />
+                    </div>
+                    {/* Medium Carb */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-orange-400">
+                        <Zap size={14} />
+                        <h3 className="text-xs font-bold uppercase tracking-widest">{t("mediumCarbDay")}</h3>
+                      </div>
+                      <MacroInputGrid 
+                        config={settingsDraft.carbCycling?.medium}
+                        onChange={(val) => {
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            carbCycling: { ...settingsDraft.carbCycling, medium: val }
+                          });
+                        }}
+                        mode={inputMode}
+                      />
+                    </div>
+                    {/* Low Carb */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-blue-400">
+                        <Calendar size={14} />
+                        <h3 className="text-xs font-bold uppercase tracking-widest">{t("lowCarbDay")}</h3>
+                      </div>
+                      <MacroInputGrid 
+                        config={settingsDraft.carbCycling?.low}
+                        onChange={(val) => {
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            carbCycling: { ...settingsDraft.carbCycling, low: val }
                           });
                         }}
                         mode={inputMode}
@@ -696,7 +750,7 @@ export default function Nutrition() {
                 {settingsDraft.mode === 'cut-phases' && (
                   <div className="space-y-8">
                     {settingsDraft.cutPhases.map((phase, idx) => (
-                      <div key={idx} className="space-y-4 rounded-2xl bg-white/5 p-4 border border-white/5">
+                      <div key={idx} className="space-y-4 rounded-2xl bg-white/[0.06] p-4 border border-white/5">
                         <div className="flex items-center justify-between">
                           <h3 className="text-xs font-bold text-purple-400 uppercase tracking-widest">{t("phase")} {idx + 1}</h3>
                           <button 
@@ -754,7 +808,7 @@ export default function Nutrition() {
                 onClick={handleSaveSettings}
                 disabled={!hasSettingsChanges}
                 className={`w-full rounded-2xl py-4 font-bold transition-all flex items-center justify-center gap-2 ${
-                  hasSettingsChanges ? "bg-green-500 text-white shadow-lg shadow-green-500/30" : "bg-white/5 text-white/20"
+                  hasSettingsChanges ? "bg-green-500 text-white shadow-lg shadow-green-500/30" : "bg-white/[0.06] text-white/20"
                 }`}
               >
                 <Save size={18} />
@@ -774,28 +828,57 @@ export default function Nutrition() {
               <p className="text-sm font-bold text-blue-400">{t(appData.nutritionSettings.mode as any)}</p>
             </div>
             <div className="flex items-center gap-2">
-               <button 
-                 onClick={() => {
-                   const nextType = resolvedNutritionToday.metadata.currentDayType === 'training' ? 'rest' : 'training';
-                   setSessionDayType(nextType);
-                 }}
-                 className={`flex flex-col items-center justify-center h-10 px-4 rounded-xl transition-all active:scale-95 ${
-                   resolvedNutritionToday.metadata.currentDayType === 'training' ? "bg-orange-500/20 text-orange-400" : "bg-blue-500/20 text-blue-400"
-                 }`}
-               >
-                 <div className="flex items-center text-[10px] font-bold uppercase tracking-widest">
-                   {resolvedNutritionToday.metadata.currentDayType === 'training' ? <Zap size={12} className="mr-1" /> : <Calendar size={12} className="mr-1" />}
-                   {t(resolvedNutritionToday.metadata.currentDayType === 'training' ? "trainingDay" : "restDay")}
+               {appData.nutritionSettings.mode === 'carb-cycling' ? (
+                 <div className="flex gap-1 rounded-xl bg-white/[0.06] p-1">
+                   {(['high', 'medium', 'low'] as const).map(type => (
+                     <button
+                       key={type}
+                       onClick={() => {
+                         setAppData({
+                           ...appData,
+                           days: {
+                             ...appData.days,
+                             [today]: {
+                               ...(appData.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] }),
+                               manualCarbDay: type
+                             }
+                           }
+                         });
+                       }}
+                       className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                         (appData.days[today]?.manualCarbDay || 'medium') === type 
+                           ? "bg-white text-black shadow-lg" 
+                           : "text-white/40 hover:text-white"
+                       }`}
+                     >
+                       {t(type as any)}
+                     </button>
+                   ))}
                  </div>
-                 <span className="text-[8px] opacity-40 uppercase tracking-tighter">
-                   {resolvedNutritionToday.metadata.dayTypeSource === 'session' ? t("manualDayType" as any) : t("autoDayType" as any)}
-                 </span>
-               </button>
+               ) : (
+                 <button 
+                   onClick={() => {
+                     const nextType = resolvedNutritionToday.metadata.currentDayType === 'training' ? 'rest' : 'training';
+                     setSessionDayType(nextType);
+                   }}
+                   className={`flex flex-col items-center justify-center h-10 px-4 rounded-xl transition-all active:scale-95 ${
+                     resolvedNutritionToday.metadata.currentDayType === 'training' ? "bg-orange-500/20 text-orange-400" : "bg-blue-500/20 text-blue-400"
+                   }`}
+                 >
+                   <div className="flex items-center text-[10px] font-bold uppercase tracking-widest">
+                     {resolvedNutritionToday.metadata.currentDayType === 'training' ? <Zap size={12} className="mr-1" /> : <Calendar size={12} className="mr-1" />}
+                     {t(resolvedNutritionToday.metadata.currentDayType === 'training' ? "trainingDay" : "restDay")}
+                   </div>
+                   <span className="text-[8px] opacity-40 uppercase tracking-tighter">
+                     {resolvedNutritionToday.metadata.dayTypeSource === 'session' ? t("manualDayType" as any) : t("autoDayType" as any)}
+                   </span>
+                 </button>
+               )}
             </div>
           </div>
 
           {appData.nutritionSettings.mode === 'cut-phases' && (
-            <div className="flex items-center justify-between rounded-xl bg-white/5 p-3">
+            <div className="flex items-center justify-between rounded-xl bg-white/[0.06] p-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/20 text-purple-400">
                   <RefreshCw size={16} />
@@ -822,19 +905,23 @@ export default function Nutrition() {
         </GlassCard>
 
         {/* Suggestion Shelf */}
-        {appData.dietPlans.length > 0 && (
+        {appData.nutritionSettings.mode === 'cut-phases' && appData.dietPlans.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <Sparkles size={14} className="text-purple-400" />
                 <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-                  {t("phase")} {resolvedNutritionToday.metadata.currentPhase + 1} {t("suggestions" as any) || "Suggestions"}
+                  {appData.nutritionSettings.mode === 'cut-phases' ? (
+                    `${t("phase")} ${resolvedNutritionToday.metadata.currentPhase + 1} ${t("suggestions" as any) || "Suggestions"}`
+                  ) : (
+                    t("suggestions" as any) || "Suggestions"
+                  )}
                 </h3>
               </div>
               <div className="flex gap-2">
                 <button 
                   onClick={applyAllSuggestedMeals}
-                  className="text-[10px] font-bold uppercase px-2 py-1 rounded-lg bg-white/5 text-white/40 hover:bg-white/10"
+                  className="text-[10px] font-bold uppercase px-2 py-1 rounded-lg bg-white/[0.06] text-white/40 hover:bg-white/[0.08]"
                 >
                   {t("mirrorAll" as any) || "Mirror All"}
                 </button>
@@ -844,7 +931,7 @@ export default function Nutrition() {
                     setSelectedSuggestions([]);
                   }}
                   className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg transition-all ${
-                    isMergeMode ? "bg-purple-500 text-white" : "bg-white/5 text-white/40 hover:bg-white/10"
+                    isMergeMode ? "bg-purple-500 text-white" : "bg-white/[0.06] text-white/40 hover:bg-white/[0.08]"
                   }`}
                 >
                   {isMergeMode ? t("cancel") : t("merge" as any) || "Merge"}
@@ -873,7 +960,7 @@ export default function Nutrition() {
                     className={`relative flex-shrink-0 w-32 rounded-2xl p-4 border transition-all active:scale-95 ${
                       selectedSuggestions.includes(meal.id) 
                         ? "bg-purple-500/20 border-purple-500/50" 
-                        : "bg-white/5 border-white/5 hover:bg-white/10"
+                        : "bg-white/[0.06] border-white/5 hover:bg-white/[0.08]"
                     }`}
                   >
                     <div className="flex flex-col items-center text-center space-y-2">
@@ -965,7 +1052,7 @@ export default function Nutrition() {
                 </button>
                 <button 
                   onClick={copyToTomorrow}
-                  className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-xs font-bold text-white/40 hover:bg-white/10 hover:text-white transition-all"
+                  className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-xs font-bold text-white/40 hover:bg-white/[0.08] hover:text-white transition-all"
                 >
                   <Calendar size={14} />
                   {t("copyToTomorrow")}
@@ -983,7 +1070,7 @@ export default function Nutrition() {
           dayData.meals.filter(m => !m.deleted).map((meal) => (
             <GlassCard 
               key={meal.id} 
-              className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/10 transition-all active:scale-[0.98]"
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/[0.08] transition-all active:scale-[0.98]"
               onClick={() => setSelectedMeal(meal)}
             >
               <div className="flex items-center gap-4">
@@ -1013,8 +1100,8 @@ export default function Nutrition() {
 
       {/* Import Modal */}
       {showImport && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/90">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("importPlan" as any)}</h2>
               <button onClick={() => setShowImport(false)} className="text-white/40 hover:text-white">
@@ -1040,8 +1127,8 @@ export default function Nutrition() {
 
       {/* Add Meal Modal */}
       {showAddMeal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("customMeal")}</h2>
               <button onClick={() => setShowAddMeal(false)} className="text-white/40 hover:text-white">
@@ -1181,8 +1268,8 @@ export default function Nutrition() {
 
       {/* Clear All Confirmation Modal */}
       {showClearConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm space-y-6 border-white/20 bg-black/80 p-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm space-y-6 border-white/20 bg-black/80 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="space-y-2 text-center">
               <h2 className="text-xl font-bold text-red-400">{t("clearAll")}?</h2>
               <p className="text-sm text-white/40">This will remove all meals logged for today. This action cannot be undone.</p>
@@ -1208,8 +1295,8 @@ export default function Nutrition() {
 
       {/* Delete Plan Confirmation Modal */}
       {showDeletePlanConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm space-y-6 border-white/20 bg-black/80 p-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm space-y-6 border-white/20 bg-black/80 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="space-y-2 text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-500">
                 <Trash2 size={32} />
@@ -1238,8 +1325,8 @@ export default function Nutrition() {
 
       {/* Meal Detail Modal */}
       {selectedMeal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm p-6 space-y-6 border-white/20 bg-black/80">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm p-6 space-y-6 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               {isEditingMeal ? (
                 <input 
@@ -1453,7 +1540,7 @@ function MacroProgress({ label, cur, goal, color }: { label: string; cur: number
         <span className="text-white/40">{label}</span>
         <span>{cur.toFixed(1)}g</span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
         <div 
           className={`h-full ${color} transition-all duration-500`} 
           style={{ width: `${Math.min(100, goal > 0 ? (cur / goal) * 100 : 0)}%` }} 
@@ -1465,16 +1552,22 @@ function MacroProgress({ label, cur, goal, color }: { label: string; cur: number
 }
 
 function MacroInputGrid({ config, onChange, mode }: { config: MacroGrams; onChange: (val: MacroGrams) => void; mode: 'grams' | 'percentage' }) {
-  const totalCalories = calcCalories(config.protein, config.carbs, config.fat) || 2000;
+  if (!config) return null;
+  const totalCalories = config.calories || calcCalories(config.protein, config.carbs, config.fat) || 2000;
   
   const getVal = (macro: keyof MacroGrams) => {
+    if (macro === 'calories') return config.calories || calcCalories(config.protein, config.carbs, config.fat);
     if (mode === 'grams') return config[macro];
     const cal = macro === 'fat' ? config[macro] * 9 : config[macro] * 4;
     return totalCalories > 0 ? Math.round((cal / totalCalories) * 100) : 0;
   };
 
-  const handleInputChange = (macro: keyof MacroGrams, val: string) => {
+  const handleInputChange = (macro: keyof MacroGrams | 'calories', val: string) => {
     const num = Number(val) || 0;
+    if (macro === 'calories') {
+      onChange({ ...config, calories: num });
+      return;
+    }
     if (mode === 'grams') {
       onChange({ ...config, [macro]: num });
     } else {
@@ -1486,21 +1579,35 @@ function MacroInputGrid({ config, onChange, mode }: { config: MacroGrams; onChan
   };
 
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {(['protein', 'carbs', 'fat'] as const).map(m => (
-        <div key={m} className="space-y-1">
-          <label className="text-[8px] font-bold uppercase tracking-widest text-white/20">
-            {m} {mode === 'percentage' ? '(%)' : '(g)'}
-          </label>
-          <input 
-            type="number" 
-            inputMode="decimal"
-            className="w-full rounded-xl bg-white/5 px-3 py-2 text-xs outline-none ring-1 ring-white/10 focus:ring-blue-500/50"
-            value={getVal(m)}
-            onChange={(e) => handleInputChange(m, e.target.value)}
-          />
-        </div>
-      ))}
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        {(['protein', 'carbs', 'fat'] as const).map(m => (
+          <div key={m} className="space-y-1">
+            <label className="text-[8px] font-bold uppercase tracking-widest text-white/20">
+              {m} {mode === 'percentage' ? '(%)' : '(g)'}
+            </label>
+            <input 
+              type="number" 
+              inputMode="decimal"
+              className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-xs outline-none ring-1 ring-white/10 focus:ring-blue-500/50"
+              value={getVal(m)}
+              onChange={(e) => handleInputChange(m, e.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="space-y-1">
+        <label className="text-[8px] font-bold uppercase tracking-widest text-white/20">
+          Target Calories (kcal)
+        </label>
+        <input 
+          type="number" 
+          inputMode="decimal"
+          className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-xs outline-none ring-1 ring-white/10 focus:ring-blue-500/50"
+          value={getVal('calories')}
+          onChange={(e) => handleInputChange('calories', e.target.value)}
+        />
+      </div>
     </div>
   );
 }
