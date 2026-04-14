@@ -208,6 +208,9 @@ export const translations = {
     planTodayWorkout: "Plan your workout for today",
     planned: "Planned",
     start: "Start",
+    edit: "Edit",
+    done: "Done",
+    dragToReorder: "Drag to reorder",
   },
   zh: {
     dashboard: "仪表盘",
@@ -418,5 +421,8 @@ export const translations = {
     planTodayWorkout: "规划今日训练动作",
     planned: "已规划",
     start: "开始",
+    edit: "编辑",
+    done: "完成",
+    dragToReorder: "长按拖动排序",
   }
 };
