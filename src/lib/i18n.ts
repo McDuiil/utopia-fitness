@@ -204,6 +204,10 @@ export const translations = {
     quantity: "Quantity",
     weightGrams: "Weight (g)",
     manualCalories: "Manual Calories",
+    trainingPlan: "Training Plan",
+    planTodayWorkout: "Plan your workout for today",
+    planned: "Planned",
+    start: "Start",
   },
   zh: {
     dashboard: "仪表盘",
@@ -410,5 +414,9 @@ export const translations = {
     quantity: "数量",
     weightGrams: "重量 (克)",
     manualCalories: "手动热量",
+    trainingPlan: "训练规划",
+    planTodayWorkout: "规划今日训练动作",
+    planned: "已规划",
+    start: "开始",
   }
 };
