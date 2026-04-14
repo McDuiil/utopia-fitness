@@ -1,14 +1,68 @@
-import React, { useState } from "react";
-import { Activity, Flame, Footprints, Droplets, Plus, Play, Utensils, Settings, X, Check, AlertCircle, Award } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Activity, Flame, Footprints, Droplets, Plus, Play, Utensils, Settings, X, Check, AlertCircle, Award, GripVertical, CheckCircle2 } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useApp } from "@/src/context/AppContext";
 import { DayData } from "../types";
 import { getTodayStr } from "../lib/utils";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  TouchSensor,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { motion, AnimatePresence } from "motion/react";
+
+function SortableWidget({ id, children, isEditing }: { id: string; children: React.ReactNode; isEditing: boolean }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 100 : 'auto',
+    opacity: isDragging ? 0.8 : 1,
+    scale: isDragging ? 1.02 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={`relative ${isEditing ? 'touch-none' : ''}`}>
+      {children}
+      {isEditing && (
+        <div 
+          {...attributes} 
+          {...listeners}
+          className="absolute top-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white/60 backdrop-blur-sm active:scale-95 active:bg-blue-500 active:text-white transition-all cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical size={16} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { t, appData, language, calculateBMR, setAppData, selectedDate, setSelectedDate, setActiveTab, resolvedNutritionToday } = useApp();
   const [showWidgetManager, setShowWidgetManager] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [showWeightEditor, setShowWeightEditor] = useState(false);
   const [showWaterEditor, setShowWaterEditor] = useState(false);
   const [tempWeight, setTempWeight] = useState("");
@@ -21,9 +75,8 @@ export default function Dashboard() {
   const bmr = calculateBMR(appData.profile);
   const workoutCalories = (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0);
   
-  // Streak Calculation Logic (Workout-based)
   const calculateStreak = () => {
-    let currentStreak = 0;
+    let streak = 0;
     const todayStr = getTodayStr();
     let checkDate = new Date();
     
@@ -32,34 +85,63 @@ export default function Dashboard() {
     const hasWorkoutToday = todayData?.workoutSessions?.some(s => !s.deleted && s.exercises && s.exercises.length > 0);
     
     if (hasWorkoutToday) {
-      currentStreak++;
+      streak++;
       checkDate.setDate(checkDate.getDate() - 1);
     } else {
       // If no workout today, start checking from yesterday
       checkDate.setDate(checkDate.getDate() - 1);
     }
 
-    // Check backwards consecutively
+    // Check backwards
     while (true) {
-      const dateStr = checkDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
+      const dateStr = checkDate.toLocaleDateString('en-CA');
       const day = appData.days[dateStr];
       const hasWorkout = day?.workoutSessions?.some(s => !s.deleted && s.exercises && s.exercises.length > 0);
 
       if (hasWorkout) {
-        currentStreak++;
+        streak++;
         checkDate.setDate(checkDate.getDate() - 1);
       } else {
         break;
       }
       
-      if (currentStreak > 3650) break; // Safety break
+      if (streak > 3650) break; // Safety break
     }
-    return currentStreak;
+    return streak;
   };
 
   const streak = calculateStreak();
   const totalBurned = bmr + workoutCalories;
   const dailyDeficit = totalBurned - resolvedNutritionToday.calories.consumed;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const enabled = appData.enabledWidgets || [];
+      const oldIndex = enabled.indexOf(active.id as string);
+      const newIndex = enabled.indexOf(over.id as string);
+      
+      const newOrder = arrayMove(enabled, oldIndex, newIndex);
+      setAppData({ ...appData, enabledWidgets: newOrder });
+    }
+  };
 
   const chartData = [
     { time: "6am", calories: 120 },
@@ -104,6 +186,7 @@ export default function Dashboard() {
     if (currentIndex === -1 || currentIndex === dates.length - 1) return null;
     
     const prevDateWithWeight = dates.slice(currentIndex + 1).find(d => appData.days[d].weight);
+    console.log("Current date:", selectedDate, "Weight:", dayData.weight, "Prev date with weight:", prevDateWithWeight, "Prev weight:", prevDateWithWeight ? appData.days[prevDateWithWeight].weight : 'N/A');
     if (!prevDateWithWeight || !dayData.weight) return null;
     
     const diff = dayData.weight - (appData.days[prevDateWithWeight].weight || 0);
@@ -124,127 +207,16 @@ export default function Dashboard() {
 
   const weightHistoryData = getWeightHistory();
   const weightTrend = getWeightTrend();
+  const calorieGoal = appData.profile?.customCalorieGoal || 2400;
 
-  const handleSaveWeight = () => {
-    const day = appData.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [selectedDate]: {
-          ...day,
-          weight: tempWeight ? Number(tempWeight) : undefined,
-          bodyFat: tempBF ? Number(tempBF) : undefined
-        }
-      }
-    });
-    setShowWeightEditor(false);
-  };
+  const enabledWidgets = appData.enabledWidgets || ['weight', 'bodyFat', 'calories', 'deficit', 'activity', 'water', 'quickWorkout', 'quickMeal', 'streak'];
 
-  const openWeightEditor = () => {
-    setTempWeight(dayData.weight?.toString() || "");
-    setTempBF(dayData.bodyFat?.toString() || "");
-    setShowWeightEditor(true);
-  };
-
-  const handleAddWater = (amount: number) => {
-    const day = appData.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [selectedDate]: {
-          ...day,
-          water: (day.water || 0) + amount
-        }
-      }
-    });
-  };
-
-  const handleSaveWater = () => {
-    const day = appData.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [selectedDate]: {
-          ...day,
-          water: Number(tempWater)
-        }
-      }
-    });
-    setShowWaterEditor(false);
-  };
-
-  return (
-    <div className="space-y-6 pb-32 pt-[calc(2rem+env(safe-area-inset-top,0px))]">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold tracking-tight">
-              {isHistory ? t("viewingHistory") : t("today")}
-            </h1>
-            {isHistory && (
-              <button 
-                onClick={() => setSelectedDate(today)}
-                className="rounded-full bg-blue-500/20 px-2 py-1 text-[10px] font-bold text-blue-400"
-              >
-                {t("backToToday")}
-              </button>
-            )}
-          </div>
-          <p className="text-white/40 dark:text-white/40 light:text-black/40">{formatDate()}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setShowWidgetManager(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-white/40 hover:bg-white/10 hover:text-white transition-colors"
-          >
-            <Settings size={20} />
-          </button>
-          <div className="h-12 w-12 rounded-full border border-white/20 bg-white/10 p-1 dark:border-white/20 dark:bg-white/10 light:border-black/10 light:bg-black/5">
-            <img
-              src={appData.profile?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=Felix`}
-              alt="Avatar"
-              className="h-full w-full rounded-full"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Resume Workout Banner */}
-      {appData.activeWorkoutSession && (
-        <div className="px-4">
+  const renderWidget = (id: string) => {
+    switch (id) {
+      case 'quickWorkout':
+        return (
           <GlassCard 
-            className="flex items-center justify-between p-4 border-blue-500/30 bg-blue-500/10 cursor-pointer active:scale-95 transition-transform"
-            onClick={() => setActiveTab('workouts')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500 text-white animate-pulse">
-                <Play size={20} fill="currentColor" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-blue-400">{t("workoutInProgress")}...</h3>
-                <p className="text-[10px] text-white/40">
-                  {appData.activeWorkoutSession.category ? t(appData.activeWorkoutSession.category as any) : t("workouts")} • {new Date(appData.activeWorkoutSession.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-blue-400">
-              <span className="text-xs font-bold">{t("resume")}</span>
-              <Play size={14} fill="currentColor" />
-            </div>
-          </GlassCard>
-        </div>
-      )}
-
-      {/* Quick Action Widgets Row */}
-      <div className="grid grid-cols-2 gap-4 px-4">
-        {isEnabled('quickWorkout') && (
-          <GlassCard 
-            className="flex flex-col justify-between p-4 aspect-square cursor-pointer active:scale-95 transition-transform bg-blue-500/10 border-blue-500/20"
+            className="flex flex-col justify-between p-4 h-full cursor-pointer active:scale-95 transition-transform bg-blue-500/10 border-blue-500/20"
             onClick={() => setActiveTab('workouts')}
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-500 text-white shadow-lg shadow-blue-500/30">
@@ -255,11 +227,11 @@ export default function Dashboard() {
               <p className="text-[10px] text-white/40 dark:text-white/40 light:text-black/40">{t("workouts")}</p>
             </div>
           </GlassCard>
-        )}
-
-        {isEnabled('quickMeal') && (
+        );
+      case 'quickMeal':
+        return (
           <GlassCard 
-            className="flex flex-col justify-between p-4 aspect-square cursor-pointer active:scale-95 transition-transform bg-green-500/10 border-green-500/20"
+            className="flex flex-col justify-between p-4 h-full cursor-pointer active:scale-95 transition-transform bg-green-500/10 border-green-500/20"
             onClick={handleQuickLogMeal}
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-green-500 text-white shadow-lg shadow-green-500/30">
@@ -270,15 +242,11 @@ export default function Dashboard() {
               <p className="text-[10px] text-white/40 dark:text-white/40 light:text-black/40">{getTimeSlot()}</p>
             </div>
           </GlassCard>
-        )}
-      </div>
-
-      {/* Main Stats Grid */}
-      <div className="grid grid-cols-2 gap-4 px-4">
-        {isEnabled('weight') && (
+        );
+      case 'weight':
+        return (
           <GlassCard 
-            className="flex flex-col items-center text-center gap-2 p-4 border-purple-500/20 bg-purple-500/5 cursor-pointer active:scale-95 transition-transform" 
-            delay={0.05}
+            className="flex flex-col items-center text-center gap-2 p-4 h-full border-purple-500/20 bg-purple-500/5 cursor-pointer active:scale-95 transition-transform" 
             onClick={openWeightEditor}
           >
             <div className="flex flex-col items-center justify-center w-full text-purple-400 gap-1">
@@ -308,10 +276,10 @@ export default function Dashboard() {
               )}
             </div>
           </GlassCard>
-        )}
-
-        {isEnabled('calories') && (
-          <GlassCard className="flex flex-col items-center text-center gap-2 p-4 border-orange-500/20 bg-orange-500/5" delay={0.1}>
+        );
+      case 'calories':
+        return (
+          <GlassCard className="flex flex-col items-center text-center gap-2 p-4 h-full border-orange-500/20 bg-orange-500/5">
             <div className="flex flex-col items-center justify-center w-full text-orange-400 gap-1">
               <div className="flex items-center gap-2">
                 <Flame size={16} />
@@ -323,17 +291,17 @@ export default function Dashboard() {
               <span className="text-xs text-white/40 dark:text-white/40 light:text-black/40">kcal</span>
             </div>
             <p className="text-[10px] text-white/40 dark:text-white/40 light:text-black/40">Goal: {resolvedNutritionToday.calories.dynamicGoal} kcal</p>
-            <div className="h-1 w-full rounded-full bg-white/10 dark:bg-white/10 light:bg-black/5 mt-auto">
+            <div className="h-1 w-full rounded-full bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5 mt-auto">
               <div 
                 className="h-full rounded-full bg-orange-500 transition-all duration-500" 
                 style={{ width: `${Math.min(100, resolvedNutritionToday.percentage.calories)}%` }}
               />
             </div>
           </GlassCard>
-        )}
-
-        {isEnabled('deficit') && (
-          <GlassCard className="flex flex-col items-center text-center gap-2 p-4 border-blue-500/20 bg-blue-500/5" delay={0.2}>
+        );
+      case 'deficit':
+        return (
+          <GlassCard className="flex flex-col items-center text-center gap-2 p-4 h-full border-blue-500/20 bg-blue-500/5">
             <div className="flex flex-col items-center justify-center w-full text-blue-400 gap-1">
               <div className="flex items-center gap-2">
                 <Activity size={16} />
@@ -345,17 +313,17 @@ export default function Dashboard() {
               <span className="text-xs text-white/40 dark:text-white/40 light:text-black/40">kcal</span>
             </div>
             <p className="text-[10px] text-white/40 dark:text-white/40 light:text-black/40">Target: {appData.profile.goalDeficit} kcal</p>
-            <div className="h-1 w-full rounded-full bg-white/10 dark:bg-white/10 light:bg-black/5 mt-auto">
+            <div className="h-1 w-full rounded-full bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5 mt-auto">
               <div 
                 className="h-full rounded-full bg-blue-500 transition-all duration-500" 
                 style={{ width: `${Math.min(100, (dailyDeficit / appData.profile.goalDeficit) * 100)}%` }}
               />
             </div>
           </GlassCard>
-        )}
-
-        {isEnabled('streak') && (
-          <GlassCard className="flex flex-col items-center text-center gap-2 p-4 border-yellow-500/20 bg-yellow-500/5" delay={0.22}>
+        );
+      case 'streak':
+        return (
+          <GlassCard className="flex flex-col items-center text-center gap-2 p-4 h-full border-yellow-500/20 bg-yellow-500/5">
             <div className="flex flex-col items-center justify-center w-full text-yellow-500 gap-1">
               <div className="flex items-center gap-2">
                 <Award size={16} />
@@ -367,22 +335,19 @@ export default function Dashboard() {
               <span className="text-xs text-white/40 dark:text-white/40 light:text-black/40">{t("days") || "d"}</span>
             </div>
             <p className="text-[10px] text-white/40 dark:text-white/40 light:text-black/40">{streak > 0 ? t("keepGoing") || "Keep it up!" : t("startToday") || "Start today!"}</p>
-            <div className="h-1 w-full rounded-full bg-white/10 dark:bg-white/10 light:bg-black/5 mt-auto">
+            <div className="h-1 w-full rounded-full bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5 mt-auto">
               <div 
                 className="h-full rounded-full bg-yellow-500 transition-all duration-500" 
                 style={{ width: `${Math.min(100, (streak / 7) * 100)}%` }}
               />
             </div>
           </GlassCard>
-        )}
-
-        {isEnabled('bodyFat') && (
+        );
+      case 'bodyFat':
+        return (
           <GlassCard 
-            className="flex flex-col items-center text-center gap-2 p-4 border-pink-500/20 bg-pink-500/5 cursor-pointer active:scale-95 transition-transform" 
-            delay={0.25}
-            onClick={() => {
-              setActiveTab('profile');
-            }}
+            className="flex flex-col items-center text-center gap-2 p-4 h-full border-pink-500/20 bg-pink-500/5 cursor-pointer active:scale-95 transition-transform" 
+            onClick={() => setActiveTab('profile')}
           >
             <div className="flex flex-col items-center justify-center w-full text-pink-400 gap-1">
               <div className="flex items-center gap-2">
@@ -397,42 +362,17 @@ export default function Dashboard() {
               <span className="text-xs text-white/40 dark:text-white/40 light:text-black/40">%</span>
             </div>
             <p className="text-[10px] text-white/40 dark:text-white/40 light:text-black/40">Goal: {appData.profile.goalBodyFat}%</p>
-            <div className="h-1 w-full rounded-full bg-white/10 dark:bg-white/10 light:bg-black/5 mt-auto">
+            <div className="h-1 w-full rounded-full bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5 mt-auto">
               <div 
                 className="h-full rounded-full bg-pink-500 transition-all duration-500" 
                 style={{ width: `${Math.min(100, ((dayData.bodyFat || appData.profile.bodyFat || 20) / (appData.profile.goalBodyFat || 15)) * 100)}%` }}
               />
             </div>
           </GlassCard>
-        )}
-      </div>
-
-      {/* Late Night Coach Suggestion */}
-      {!isHistory && new Date().getHours() >= 22 && (
-        <div className="px-4">
-          <GlassCard className="p-4 border-yellow-500/30 bg-yellow-500/10 flex items-start gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-500 text-black">
-              <AlertCircle size={20} />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-yellow-500">{t("lateNightTitle")}</h3>
-              <p className="text-xs text-white/70">
-                {resolvedNutritionToday.remaining.protein > 20 
-                  ? t("proteinDeficitSuggestion")
-                  : resolvedNutritionToday.remaining.carbs < -30
-                    ? t("carbExcessSuggestion")
-                    : t("goalAchievedSuggestion")
-                }
-              </p>
-            </div>
-          </GlassCard>
-        </div>
-      )}
-
-      {/* Weight History Chart */}
-      {isEnabled('activity') && (
-        <div className="px-4">
-          <GlassCard className="h-[320px] flex flex-col p-6" delay={0.3}>
+        );
+      case 'activity':
+        return (
+          <GlassCard className="h-[320px] flex flex-col p-6">
             <div className="mb-6 flex items-center justify-center w-full text-purple-400">
               <div className="flex items-center gap-2">
                 <Activity size={18} />
@@ -507,18 +447,14 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
           </GlassCard>
-        </div>
-      )}
-
-      {/* Water Intake */}
-      {isEnabled('water') && (
-        <div className="px-4">
-          <GlassCard className="flex items-center justify-between p-4 overflow-hidden relative" delay={0.4}>
+        );
+      case 'water':
+        return (
+          <GlassCard className="flex items-center justify-between p-4 overflow-hidden relative h-full">
             <div 
               className="absolute bottom-0 left-0 right-0 bg-blue-500/10 transition-all duration-1000 ease-out z-0 pointer-events-none"
               style={{ height: `${Math.min(100, ((dayData.water || 0) / 2500) * 100)}%` }}
             />
-            
             <div className="flex items-center gap-4 z-10">
               <div 
                 className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-400 cursor-pointer active:scale-90 transition-transform"
@@ -545,13 +481,211 @@ export default function Dashboard() {
               </button>
             </div>
           </GlassCard>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const handleSaveWeight = () => {
+    const day = appData.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
+    setAppData({
+      ...appData,
+      days: {
+        ...appData.days,
+        [selectedDate]: {
+          ...day,
+          weight: tempWeight ? Number(tempWeight) : undefined,
+          bodyFat: tempBF ? Number(tempBF) : undefined
+        }
+      }
+    });
+    setShowWeightEditor(false);
+  };
+
+  const openWeightEditor = () => {
+    setTempWeight(dayData.weight?.toString() || "");
+    setTempBF(dayData.bodyFat?.toString() || "");
+    setShowWeightEditor(true);
+  };
+
+  const handleAddWater = (amount: number) => {
+    const day = appData.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
+    setAppData({
+      ...appData,
+      days: {
+        ...appData.days,
+        [selectedDate]: {
+          ...day,
+          water: (day.water || 0) + amount
+        }
+      }
+    });
+  };
+
+  const handleSaveWater = () => {
+    const day = appData.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
+    setAppData({
+      ...appData,
+      days: {
+        ...appData.days,
+        [selectedDate]: {
+          ...day,
+          water: Number(tempWater)
+        }
+      }
+    });
+    setShowWaterEditor(false);
+  };
+
+  return (
+    <div className="space-y-6 pb-32 pt-[calc(2rem+env(safe-area-inset-top,0px))]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold tracking-tight">
+              {isHistory ? t("viewingHistory") : t("today")}
+            </h1>
+            {isHistory && (
+              <button 
+                onClick={() => setSelectedDate(today)}
+                className="rounded-full bg-blue-500/20 px-2 py-1 text-[10px] font-bold text-blue-400"
+              >
+                {t("backToToday")}
+              </button>
+            )}
+          </div>
+          <p className="text-white/40 dark:text-white/40 light:text-black/40">{formatDate()}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsEditing(!isEditing)}
+            className={`flex h-10 px-4 items-center justify-center rounded-full transition-all font-bold text-xs ${
+              isEditing 
+                ? "bg-green-500 text-white shadow-lg shadow-green-500/30" 
+                : "bg-white/[0.06] text-white/40 hover:text-white"
+            }`}
+          >
+            {isEditing ? (
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={16} />
+                {t("done")}
+              </div>
+            ) : (
+              t("edit")
+            )}
+          </button>
+          <button 
+            onClick={() => setShowWidgetManager(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.06] text-white/40 hover:bg-white/[0.06] hover:text-white transition-colors"
+          >
+            <Settings size={20} />
+          </button>
+          <div className="h-12 w-12 rounded-full border border-white/20 bg-white/[0.06] p-1 dark:border-white/20 dark:bg-white/[0.06] light:border-black/10 light:bg-black/5">
+            <img
+              src={appData.profile?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=Felix`}
+              alt="Avatar"
+              className="h-full w-full rounded-full"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Resume Workout Banner */}
+      {appData.activeWorkoutSession && (
+        <div className="px-4">
+          <GlassCard 
+            className="flex items-center justify-between p-4 border-blue-500/30 bg-blue-500/10 cursor-pointer active:scale-95 transition-transform"
+            onClick={() => setActiveTab('workouts')}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500 text-white animate-pulse">
+                <Play size={20} fill="currentColor" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-blue-400">{t("workoutInProgress")}...</h3>
+                <p className="text-[10px] text-white/40">
+                  {appData.activeWorkoutSession.category ? t(appData.activeWorkoutSession.category as any) : t("workouts")} • {new Date(appData.activeWorkoutSession.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-blue-400">
+              <span className="text-xs font-bold">{t("resume")}</span>
+              <Play size={14} fill="currentColor" />
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {/* Draggable Widgets Area */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={enabledWidgets}
+          strategy={rectSortingStrategy}
+        >
+          <div className="px-4 space-y-4">
+            <AnimatePresence mode="popLayout">
+              {isEditing && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="flex items-center justify-center gap-2 py-2 text-blue-400"
+                >
+                  <GripVertical size={14} />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">{t("dragToReorder")}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="grid grid-cols-2 gap-4">
+              {enabledWidgets.map((id) => {
+                const isFullWidth = ['activity', 'water'].includes(id);
+                return (
+                  <div key={id} className={isFullWidth ? "col-span-2" : "col-span-1"}>
+                    <SortableWidget id={id} isEditing={isEditing}>
+                      {renderWidget(id)}
+                    </SortableWidget>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </SortableContext>
+      </DndContext>
+
+      {/* Late Night Coach Suggestion */}
+      {!isHistory && new Date().getHours() >= 22 && (
+        <div className="px-4">
+          <GlassCard className="p-4 border-yellow-500/30 bg-yellow-500/10 flex items-start gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-500 text-black">
+              <AlertCircle size={20} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-yellow-500">{t("lateNightTitle")}</h3>
+              <p className="text-xs text-white/70">
+                {resolvedNutritionToday.remaining.protein > 20 
+                  ? t("proteinDeficitSuggestion")
+                  : resolvedNutritionToday.remaining.carbs < -30
+                    ? t("carbExcessSuggestion")
+                    : t("goalAchievedSuggestion")
+                }
+              </p>
+            </div>
+          </GlassCard>
         </div>
       )}
 
       {/* Weight Editor Modal */}
       {showWeightEditor && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("recordWeight")}</h2>
               <button onClick={() => setShowWeightEditor(false)} className="text-white/40 hover:text-white">
@@ -594,8 +728,8 @@ export default function Dashboard() {
 
       {/* Water Editor Modal */}
       {showWaterEditor && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("logWater")}</h2>
               <button onClick={() => setShowWaterEditor(false)} className="text-white/40 hover:text-white">
@@ -619,7 +753,7 @@ export default function Dashboard() {
                   <button 
                     key={amount}
                     onClick={() => setTempWater(amount.toString())}
-                    className="rounded-xl bg-white/5 py-2 text-xs font-bold hover:bg-white/10"
+                    className="rounded-xl bg-white/5 py-2 text-xs font-bold hover:bg-white/[0.06]"
                   >
                     {amount}ml
                   </button>
@@ -638,8 +772,8 @@ export default function Dashboard() {
 
       {/* Widget Manager Modal */}
       {showWidgetManager && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("manageWidgets")}</h2>
               <button onClick={() => setShowWidgetManager(false)} className="text-white/40 hover:text-white">
