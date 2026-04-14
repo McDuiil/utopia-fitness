@@ -62,6 +62,7 @@ export interface WorkoutSession {
   updatedAt?: number;
   deleted?: boolean;
   archived?: boolean;
+  status?: 'active' | 'completed' | 'planned';
 }
 
 export interface MacroGrams {
