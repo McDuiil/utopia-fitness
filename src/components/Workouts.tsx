@@ -16,7 +16,7 @@ const EXERCISES: Exercise[] = [
 ];
 
 export default function Workouts() {
-  const { t, language, appData, setAppData } = useApp();
+  const { t, language, appData, setAppData, showToast } = useApp();
   const [activeTab, setActiveTab] = useState<'records' | 'library'>('records');
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("all");
@@ -44,7 +44,10 @@ export default function Workouts() {
   const [showCustomExerciseModal, setShowCustomExerciseModal] = useState(false);
   const [showCaloriePrompt, setShowCaloriePrompt] = useState(false);
   const [isEditingExistingSession, setIsEditingExistingSession] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState<string>("00:00:00");
+  const [elapsedTime, setElapsedTime] = useState("00:00");
+  const [showAddOptions, setShowAddOptions] = useState(false);
+  const [isPlanning, setIsPlanning] = useState(false);
+  const [planningSession, setPlanningSession] = useState<WorkoutSession | null>(null);
 
   // Real-time timer for active session
   React.useEffect(() => {
@@ -78,14 +81,14 @@ export default function Workouts() {
 
   // Body scroll lock
   React.useEffect(() => {
-    const isModalOpen = !!editingSession || !!deletingSession || showCategoryPicker || showExercisePicker || showCustomExerciseModal || showAddCategoryModal || showCaloriePrompt;
+    const isModalOpen = !!editingSession || !!deletingSession || showCategoryPicker || showExercisePicker || showCustomExerciseModal || showAddCategoryModal || showAddOptions || isPlanning;
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [editingSession, deletingSession, showCategoryPicker, showExercisePicker, showCustomExerciseModal, showAddCategoryModal, showCaloriePrompt]);
+  }, [editingSession, deletingSession, showCategoryPicker, showExercisePicker, showCustomExerciseModal, showAddCategoryModal, showAddOptions, isPlanning]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
@@ -143,9 +146,11 @@ export default function Workouts() {
     
     // Sort by date (descending) then by startTime (descending)
     return history.sort((a, b) => {
+      // First compare by date key (YYYY-MM-DD)
       if (b.date !== a.date) {
         return b.date.localeCompare(a.date);
       }
+      // If same day, compare by startTime
       const timeA = a.session.startTime ? new Date(a.session.startTime).getTime() : 0;
       const timeB = b.session.startTime ? new Date(b.session.startTime).getTime() : 0;
       return timeB - timeA;
@@ -158,9 +163,14 @@ export default function Workouts() {
       startTime: new Date().toISOString(),
       exercises: [],
       calories: 0,
-      category: category
+      category: category,
+      status: isPlanning ? 'planned' : 'active'
     };
-    setActiveSession(newSession);
+    if (isPlanning) {
+      setPlanningSession(newSession);
+    } else {
+      setActiveSession(newSession);
+    }
     setShowCategoryPicker(false);
   };
 
@@ -177,6 +187,20 @@ export default function Workouts() {
           ...editingSession.session,
           exercises: [...editingSession.session.exercises, sessionEx]
         }
+      });
+      setShowExercisePicker(false);
+      return;
+    }
+
+    if (isPlanning && planningSession) {
+      const sessionEx: WorkoutSessionExercise = {
+        exerciseId: ex.id,
+        name: ex.name[language],
+        sets: [{ reps: 0, weight: 0, isPR: false }]
+      };
+      setPlanningSession({
+        ...planningSession,
+        exercises: [...planningSession.exercises, sessionEx]
       });
       setShowExercisePicker(false);
       return;
@@ -238,6 +262,16 @@ export default function Workouts() {
   };
 
   const updateSet = (exIndex: number, setIndex: number, field: 'reps' | 'weight' | 'isPR', value: any) => {
+    if (isPlanning && planningSession) {
+      const newExercises = [...planningSession.exercises];
+      newExercises[exIndex].sets[setIndex] = {
+        ...newExercises[exIndex].sets[setIndex],
+        [field]: value
+      };
+      setPlanningSession({ ...planningSession, exercises: newExercises });
+      return;
+    }
+
     if (!activeSession) return;
     const newExercises = [...activeSession.exercises];
     newExercises[exIndex].sets[setIndex] = {
@@ -248,6 +282,14 @@ export default function Workouts() {
   };
 
   const addSet = (exIndex: number) => {
+    if (isPlanning && planningSession) {
+      const newExercises = [...planningSession.exercises];
+      const lastSet = newExercises[exIndex].sets[newExercises[exIndex].sets.length - 1];
+      newExercises[exIndex].sets.push({ ...lastSet, isPR: false });
+      setPlanningSession({ ...planningSession, exercises: newExercises });
+      return;
+    }
+
     if (!activeSession) return;
     const newExercises = [...activeSession.exercises];
     const lastSet = newExercises[exIndex].sets[newExercises[exIndex].sets.length - 1];
@@ -282,7 +324,6 @@ export default function Workouts() {
 
   const startEditing = (date: string, session: WorkoutSession) => {
     setEditingSession({ date, session: JSON.parse(JSON.stringify(session)) });
-    setIsEditingExistingSession(true);
   };
 
   const saveEditedSession = () => {
@@ -307,7 +348,6 @@ export default function Workouts() {
       }
     });
     setEditingSession(null);
-    setIsEditingExistingSession(false);
   };
 
   const updateEditedSet = (exIdx: number, setIdx: number, field: string, value: any) => {
@@ -338,6 +378,60 @@ export default function Workouts() {
     });
   };
 
+  const savePlanningSession = () => {
+    if (!planningSession) return;
+    
+    const today = getTodayStr();
+    const dayData = appData.days[today] || { date: today, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
+    
+    const finishedSession = {
+      ...planningSession,
+      updatedAt: Date.now(),
+      deleted: false
+    };
+
+    setAppData({
+      ...appData,
+      days: {
+        ...appData.days,
+        [today]: {
+          ...dayData,
+          workoutSessions: [...(dayData.workoutSessions || []), finishedSession]
+        }
+      }
+    });
+    setPlanningSession(null);
+    setIsPlanning(false);
+    showToast(t("importSuccess" as any));
+  };
+
+  const startPlannedWorkout = (date: string, session: WorkoutSession) => {
+    // 1. Remove from planned (mark as deleted or remove from array)
+    // Actually, we can just update its status to active and set it as activeSession
+    const day = appData.days[date];
+    if (!day) return;
+
+    const updatedSession = {
+      ...session,
+      status: 'active' as const,
+      startTime: new Date().toISOString(),
+      updatedAt: Date.now()
+    };
+
+    // Remove from history list temporarily while it's active
+    setAppData({
+      ...appData,
+      activeWorkoutSession: updatedSession,
+      days: {
+        ...appData.days,
+        [date]: {
+          ...day,
+          workoutSessions: day.workoutSessions.filter(s => s.id !== session.id)
+        }
+      }
+    });
+  };
+
   const finishSession = () => {
     if (!activeSession) return;
     
@@ -354,7 +448,8 @@ export default function Workouts() {
       ...activeSession,
       endTime: new Date().toISOString(),
       updatedAt: Date.now(),
-      deleted: false
+      deleted: false,
+      status: 'completed' as const
     };
 
     setAppData({
@@ -382,9 +477,9 @@ export default function Workouts() {
       {/* Header */}
       <div className="flex items-center justify-between px-4">
         <h1 className="text-3xl font-bold tracking-tight">{t("workouts")}</h1>
-        {!activeSession && (
+        {!activeSession && !planningSession && (
           <button 
-            onClick={() => setShowCategoryPicker(true)}
+            onClick={() => setShowAddOptions(true)}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95"
           >
             <Plus size={24} />
@@ -392,8 +487,68 @@ export default function Workouts() {
         )}
       </div>
 
+      {/* Add Options Menu */}
+      <AnimatePresence>
+        {showAddOptions && (
+          <div 
+            className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+            onClick={() => setShowAddOptions(false)}
+          >
+            <motion.div 
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm space-y-3 pb-8"
+            >
+              <GlassCard className="p-2 border-white/10 bg-gray-900/90 shadow-2xl">
+                <button 
+                  onClick={() => {
+                    setIsPlanning(false);
+                    setShowCategoryPicker(true);
+                    setShowAddOptions(false);
+                  }}
+                  className="flex w-full items-center gap-4 rounded-xl p-4 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-green-400">
+                    <Play size={20} fill="currentColor" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold">{t("startNewWorkout")}</p>
+                    <p className="text-xs text-white/40">Record your training in real-time</p>
+                  </div>
+                </button>
+                <div className="h-[1px] bg-white/5 mx-4" />
+                <button 
+                  onClick={() => {
+                    setIsPlanning(true);
+                    setShowCategoryPicker(true);
+                    setShowAddOptions(false);
+                  }}
+                  className="flex w-full items-center gap-4 rounded-xl p-4 hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
+                    <Plus size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold">{t("trainingPlan")}</p>
+                    <p className="text-xs text-white/40">Plan your workout for today</p>
+                  </div>
+                </button>
+              </GlassCard>
+              <button 
+                onClick={() => setShowAddOptions(false)}
+                className="w-full rounded-2xl bg-white/10 py-4 font-bold text-white backdrop-blur-xl"
+              >
+                {t("cancel")}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Tab Switcher */}
-      {!activeSession && (
+      {!activeSession && !planningSession && (
         <div className="px-4">
           <div className="flex rounded-2xl bg-white/5 p-1">
             <button 
@@ -417,7 +572,124 @@ export default function Workouts() {
       {/* Main Content */}
       <div className="px-4 flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
-          {activeSession ? (
+          {planningSession ? (
+            <motion.div 
+              key="planning"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="h-full"
+            >
+              <GlassCard className="flex flex-col max-h-[calc(100vh-14rem)] border-blue-500/30 bg-blue-500/5 p-0 overflow-hidden">
+                <div className="p-6 border-b border-white/5 bg-white/[0.02] backdrop-blur-xl z-20">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold text-blue-400">{t("trainingPlan")}</h2>
+                      <p className="text-xs text-white/40">{t("planTodayWorkout")}</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setPlanningSession(null);
+                        setIsPlanning(false);
+                      }}
+                      className="p-2 text-white/40 hover:text-white"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
+                  <div className="space-y-4">
+                    {planningSession.exercises.map((sessionEx, exIdx) => {
+                      const exercise = allExercises.find(e => e.id === sessionEx.exerciseId);
+                      return (
+                        <div key={exIdx} className="space-y-3 rounded-2xl bg-white/5 p-4 border border-white/5">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-bold">{exercise?.name[language]}</h3>
+                            <button 
+                              onClick={() => {
+                                const newExs = planningSession.exercises.filter((_, i) => i !== exIdx);
+                                setPlanningSession({...planningSession, exercises: newExs});
+                              }}
+                              className="text-white/20 hover:text-red-400 transition-colors"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-4 gap-2 text-[10px] font-bold uppercase tracking-widest text-white/20">
+                              <span className="text-center">Set</span>
+                              <span className="text-center">{exercise?.part === 'cardio' ? t("min") : "kg"}</span>
+                              <span className="text-center">{exercise?.part === 'cardio' ? t("km") || "km" : "Reps"}</span>
+                              <span className="text-center">Action</span>
+                            </div>
+                            {sessionEx.sets.map((set, setIdx) => (
+                              <div key={setIdx} className="grid grid-cols-4 items-center gap-2">
+                                <span className="text-center text-xs font-bold text-white/20">{setIdx + 1}</span>
+                                <input 
+                                  type="number" 
+                                  inputMode="decimal"
+                                  className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                  value={set.weight || ""}
+                                  onChange={e => updateSet(exIdx, setIdx, 'weight', Number(e.target.value))}
+                                />
+                                <input 
+                                  type="number" 
+                                  inputMode="numeric"
+                                  className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                  value={set.reps || ""}
+                                  onChange={e => updateSet(exIdx, setIdx, 'reps', Number(e.target.value))}
+                                />
+                                <button 
+                                  onClick={() => {
+                                    const newExs = [...planningSession.exercises];
+                                    newExs[exIdx].sets = newExs[exIdx].sets.filter((_, i) => i !== setIdx);
+                                    if (newExs[exIdx].sets.length === 0) {
+                                      newExs.splice(exIdx, 1);
+                                    }
+                                    setPlanningSession({...planningSession, exercises: newExs});
+                                  }}
+                                  className="mx-auto text-red-400/40 hover:text-red-400"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))}
+                            <button 
+                              onClick={() => addSet(exIdx)}
+                              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 py-3 text-xs font-bold text-white/40 hover:bg-white/5 transition-colors"
+                            >
+                              <Plus size={14} />
+                              {t("sets")}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button 
+                      onClick={() => setShowExercisePicker(true)}
+                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/[0.06] py-4 font-bold transition-colors hover:bg-white/[0.08]"
+                    >
+                      <Plus size={20} />
+                      {t("addExercise")}
+                    </button>
+                    <button 
+                      onClick={savePlanningSession}
+                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-blue-500 py-4 font-bold text-white shadow-lg shadow-blue-500/20 transition-transform active:scale-95"
+                    >
+                      <Check size={20} />
+                      {t("save")}
+                    </button>
+                  </div>
+                </div>
+              </GlassCard>
+            </motion.div>
+          ) : activeSession ? (
             <motion.div 
               key="active"
               initial={{ opacity: 0, y: 20 }}
@@ -437,7 +709,7 @@ export default function Workouts() {
                             {new Date(activeSession.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <div className="h-4 w-[1px] bg-white/10" />
+                        <div className="h-4 w-[1px] bg-white/[0.06]" />
                         <div className="flex items-center gap-2 text-green-400">
                           <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]" />
                           <span className="font-mono text-sm font-bold tracking-wider">{elapsedTime}</span>
@@ -497,14 +769,14 @@ export default function Workouts() {
                                 <input 
                                   type="number" 
                                   inputMode="decimal"
-                                  className="rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                  className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
                                   value={set.weight || ""}
                                   onChange={e => updateSet(exIdx, setIdx, 'weight', Number(e.target.value))}
                                 />
                                 <input 
                                   type="number" 
                                   inputMode="numeric"
-                                  className="rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                  className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
                                   value={set.reps || ""}
                                   onChange={e => updateSet(exIdx, setIdx, 'reps', Number(e.target.value))}
                                 />
@@ -512,7 +784,7 @@ export default function Workouts() {
                                   <input 
                                     type="number" 
                                     inputMode="numeric"
-                                    className="rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
                                     value={set.isPR ? 1 : 0}
                                     onChange={e => updateSet(exIdx, setIdx, 'isPR', Number(e.target.value) > 0)}
                                   />
@@ -542,7 +814,7 @@ export default function Workouts() {
                   <div className="flex gap-3 pt-4">
                     <button 
                       onClick={() => setShowExercisePicker(true)}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/10 py-4 font-bold transition-colors hover:bg-white/20"
+                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/[0.06] py-4 font-bold transition-colors hover:bg-white/[0.08]"
                     >
                       <Plus size={20} />
                       {t("addExercise")}
@@ -578,53 +850,76 @@ export default function Workouts() {
                   </button>
                 </div>
               ) : (
-                workoutHistory.map(({ date, session }, idx) => (
-                  <GlassCard key={session.id} className="p-4 relative group" delay={idx * 0.05}>
-                    <div 
-                      className="flex items-center justify-between mb-4 cursor-pointer"
-                      onClick={() => startEditing(date, session)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
-                          <Dumbbell size={20} />
+                workoutHistory.map(({ date, session }, idx) => {
+                  const isPlanned = session.status === 'planned';
+                  return (
+                    <GlassCard key={session.id} className={`p-4 relative group ${isPlanned ? 'border-blue-500/20 bg-blue-500/5' : ''}`} delay={idx * 0.05}>
+                      <div 
+                        className="flex items-center justify-between mb-4 cursor-pointer"
+                        onClick={() => startEditing(date, session)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isPlanned ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                            {isPlanned ? <Clock size={20} /> : <Dumbbell size={20} />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold">{session.category ? t(session.category as any) : t("workouts")}</h3>
+                              {isPlanned && (
+                                <span className="rounded-md bg-blue-500/20 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-blue-400">
+                                  {t("planned")}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{date}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-bold">{session.category ? t(session.category as any) : t("workouts")}</h3>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{date}</p>
+                        <div className="flex items-center gap-4">
+                          {!isPlanned ? (
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-orange-400">{session.calories} kcal</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                {calculateDuration(session.startTime, session.endTime)} {t("min")}
+                              </p>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startPlannedWorkout(date, session);
+                              }}
+                              className="flex items-center gap-2 rounded-full bg-blue-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95"
+                            >
+                              <Play size={12} fill="currentColor" />
+                              {t("start")}
+                            </button>
+                          )}
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteWorkout(date, session.id);
+                            }}
+                            className="p-2 text-white/10 hover:text-red-400 transition-colors"
+                          >
+                            <X size={18} />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-orange-400">{session.calories} kcal</p>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                            {session.manualDuration ?? calculateDuration(session.startTime, session.endTime)} {t("min")}
-                          </p>
-                        </div>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteWorkout(date, session.id);
-                          }}
-                          className="p-2 text-white/10 hover:text-red-400 transition-colors"
-                        >
-                          <X size={18} />
-                        </button>
+                      
+                      <div className="space-y-2 border-t border-white/5 pt-3">
+                        {session.exercises.slice(0, 3).map((ex, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs text-white/60">
+                            <span>{typeof ex.name === 'string' ? ex.name : (ex.name[language] || ex.name['en'])}</span>
+                            <span className="text-white/40">{ex.sets.length} {t("sets")}</span>
+                          </div>
+                        ))}
+                        {session.exercises.length > 3 && (
+                          <p className="text-[10px] text-white/20">+{session.exercises.length - 3} more exercises</p>
+                        )}
                       </div>
-                    </div>
-                    
-                    <div className="space-y-2 border-t border-white/5 pt-3">
-                      {session.exercises.slice(0, 3).map((ex, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs text-white/60">
-                          <span>{typeof ex.name === 'string' ? ex.name : (ex.name[language] || ex.name['en'])}</span>
-                          <span className="text-white/40">{ex.sets.length} {t("sets")}</span>
-                        </div>
-                      ))}
-                      {session.exercises.length > 3 && (
-                        <p className="text-[10px] text-white/20">+{session.exercises.length - 3} more exercises</p>
-                      )}
-                    </div>
-                  </GlassCard>
-                ))
+                    </GlassCard>
+                  );
+                })
               )}
             </motion.div>
           ) : (
@@ -796,14 +1091,14 @@ export default function Workouts() {
                             <input 
                               type="number" 
                               inputMode="decimal"
-                              className="rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                              className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
                               value={set.weight || ""}
                               onChange={e => updateEditedSet(exIdx, setIdx, 'weight', Number(e.target.value))}
                             />
                             <input 
                               type="number" 
                               inputMode="numeric"
-                              className="rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                              className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
                               value={set.reps || ""}
                               onChange={e => updateEditedSet(exIdx, setIdx, 'reps', Number(e.target.value))}
                             />
@@ -811,7 +1106,7 @@ export default function Workouts() {
                               <input 
                                 type="number" 
                                 inputMode="numeric"
-                                className="rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-blue-500"
                                 value={set.isPR ? 1 : 0}
                                 onChange={e => updateEditedSet(exIdx, setIdx, 'isPR', Number(e.target.value) > 0)}
                               />
@@ -891,7 +1186,7 @@ export default function Workouts() {
                 <div className="flex gap-3">
                   <button 
                     onClick={() => setShowCaloriePrompt(false)}
-                    className="flex-1 rounded-2xl bg-white/5 py-4 font-bold text-white/60 transition-colors hover:bg-white/10"
+                    className="flex-1 rounded-2xl bg-white/5 py-4 font-bold text-white/60 transition-colors hover:bg-white/[0.06]"
                   >
                     {t("cancel")}
                   </button>
@@ -910,8 +1205,8 @@ export default function Workouts() {
 
         {/* Delete Confirmation Modal */}
         {deletingSession && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-sm bg-gray-900 border border-white/10 rounded-3xl p-6 space-y-6">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+            <GlassCard className="w-full max-w-sm space-y-6 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
               <div className="text-center space-y-2">
                 <Award className="w-12 h-12 text-red-400 mx-auto" />
                 <h3 className="text-xl font-bold text-white">{t("delete")}?</h3>
@@ -920,7 +1215,7 @@ export default function Workouts() {
               <div className="flex gap-3">
                 <button 
                   onClick={() => setDeletingSession(null)}
-                  className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-2xl font-bold text-white transition-all"
+                  className="flex-1 py-4 bg-white/5 hover:bg-white/[0.06] rounded-2xl font-bold text-white transition-all"
                 >
                   {t("cancel")}
                 </button>
@@ -931,15 +1226,15 @@ export default function Workouts() {
                   {t("confirm")}
                 </button>
               </div>
-            </div>
+            </GlassCard>
           </div>
         )}
       </div>
 
       {/* Category Picker Modal */}
       {showCategoryPicker && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm space-y-6 border-white/20 bg-black/80">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm space-y-6 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("workoutCategory")}</h2>
               <button onClick={() => setShowCategoryPicker(false)} className="text-white/40 hover:text-white">
@@ -951,7 +1246,7 @@ export default function Workouts() {
                 <div key={cat} className="relative group">
                   <button
                     onClick={() => startSession(cat)}
-                    className="w-full rounded-2xl bg-white/5 p-4 text-center font-bold transition-all hover:bg-white/10 active:scale-95 border border-white/5"
+                    className="w-full rounded-2xl bg-white/5 p-4 text-center font-bold transition-all hover:bg-white/[0.06] active:scale-95 border border-white/5"
                   >
                     {t(cat as any) || cat.charAt(0).toUpperCase() + cat.slice(1)}
                   </button>
@@ -987,8 +1282,8 @@ export default function Workouts() {
 
       {/* Add Category Modal */}
       {showAddCategoryModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm space-y-4 border-white/20 bg-black/80">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("customCategory") || "Custom Category"}</h2>
               <button onClick={() => setShowAddCategoryModal(false)} className="text-white/40 hover:text-white">
@@ -1023,13 +1318,8 @@ export default function Workouts() {
           <div className="flex items-center justify-between px-6 pb-4 pt-[calc(2.5rem+env(safe-area-inset-top,0px))]">
             <h2 className="text-3xl font-bold tracking-tight">{t("addExercise")}</h2>
             <button 
-              onClick={() => {
-                setShowExercisePicker(false);
-                if (isEditingExistingSession) {
-                  // Keep isEditingExistingSession true so we return to edit modal
-                }
-              }} 
-              className="apple-button h-10 w-10 bg-white/10 text-white/80"
+              onClick={() => setShowExercisePicker(false)} 
+              className="apple-button h-10 w-10 bg-white/[0.06] text-white/80"
             >
               <X size={20} />
             </button>
@@ -1101,11 +1391,11 @@ export default function Workouts() {
                     whileTap={{ scale: 0.98 }}
                     onClick={() => addExerciseToSession(ex)}
                   >
-                    <GlassCard 
-                      variant="medium"
-                      className="flex items-center gap-4 p-4 border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors rounded-[2rem]"
-                    >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-blue-400">
+                      <GlassCard 
+                        variant="medium"
+                        className="flex items-center gap-4 p-4 border-white/5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors rounded-[2rem]"
+                      >
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.06] text-blue-400">
                         <Dumbbell size={24} />
                       </div>
                       <div className="flex-1 min-w-0 overflow-hidden">
@@ -1116,7 +1406,7 @@ export default function Workouts() {
                           </span>
                           {ex.equipment && (
                             <>
-                              <span className="h-1 w-1 shrink-0 rounded-full bg-white/10" />
+                              <span className="h-1 w-1 shrink-0 rounded-full bg-white/[0.06]" />
                               <span className="text-[10px] font-bold uppercase tracking-widest text-white/30 truncate">
                                 {ex.equipment}
                               </span>
@@ -1124,7 +1414,7 @@ export default function Workouts() {
                           )}
                         </div>
                       </div>
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-white/40">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.06] text-white/40">
                         <Plus size={20} />
                       </div>
                     </GlassCard>
@@ -1138,8 +1428,8 @@ export default function Workouts() {
 
       {/* Custom Exercise Modal */}
       {showCustomExerciseModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm space-y-4 border-white/20 bg-black/80">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("customExercise")}</h2>
               <button onClick={() => setShowCustomExerciseModal(false)} className="text-white/40 hover:text-white">
@@ -1147,39 +1437,39 @@ export default function Workouts() {
               </button>
             </div>
             
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                  <Dumbbell size={12} className="text-blue-400" />
-                  {t("exerciseName")}
-                </label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Bench Press"
-                  className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
-                  value={newExercise.name?.zh}
-                  onChange={e => setNewExercise({...newExercise, name: { en: e.target.value, zh: e.target.value }})}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                  <LayoutDashboard size={12} className="text-purple-400" />
-                  {t("filterByPart")}
-                </label>
-                <div className="relative">
-                  <select 
-                    className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none appearance-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
-                    value={newExercise.part}
-                    onChange={e => setNewExercise({...newExercise, part: e.target.value as any})}
-                  >
-                    {allCategories.map(p => (
-                      <option key={p} value={p} className="bg-gray-900">{t(p as any) || p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                    ))}
-                  </select>
-                  <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none text-white/20" />
-                </div>
-              </div>
-            </div>
+                    <div className="space-y-5">
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                          <Dumbbell size={12} className="text-blue-400" />
+                          {t("exerciseName")}
+                        </label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Bench Press"
+                          className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
+                          value={newExercise.name?.zh}
+                          onChange={e => setNewExercise({...newExercise, name: { en: e.target.value, zh: e.target.value }})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                          <LayoutDashboard size={12} className="text-purple-400" />
+                          {t("filterByPart")}
+                        </label>
+                        <div className="relative">
+                          <select 
+                            className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none appearance-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
+                            value={newExercise.part}
+                            onChange={e => setNewExercise({...newExercise, part: e.target.value as any})}
+                          >
+                            {allCategories.map(p => (
+                              <option key={p} value={p} className="bg-gray-900">{t(p as any) || p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                            ))}
+                          </select>
+                          <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none text-white/20" />
+                        </div>
+                      </div>
+                    </div>
 
             <button 
               onClick={handleAddCustomExercise}
