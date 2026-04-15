@@ -1,13 +1,29 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Clock, ChevronRight, PieChart, Utensils, X, Calendar, Zap, Settings, Save, RefreshCw, Lock, Unlock, Search, Info, FileUp, Sparkles, Check, Trash2, Edit2, Minus } from "lucide-react";
 import GlassCard from "./GlassCard";
-import { useApp } from "@/src/context/AppContext";
+import { useAppSelector } from "@/src/hooks/useAppSelector";
 import { CustomMeal, NutritionSettings, MacroGrams, DayTypeConfig, FoodItem, DietTemplate, SuggestedMeal, Ingredient } from "@/src/types";
 import { motion, AnimatePresence } from "motion/react";
 import { getTodayStr, calcCalories } from "../lib/utils";
 
 export default function Nutrition() {
-  const { t, language, appData, setAppData, calculateBMR, resolvedNutritionToday, sessionDayType, setSessionDayType, showToast, saveAppDataToCloud } = useApp();
+  const t = useAppSelector(s => s.t);
+  const language = useAppSelector(s => s.language);
+  const setAppData = useAppSelector(s => s.setAppData);
+  const calculateBMR = useAppSelector(s => s.calculateBMR);
+  const resolvedNutritionToday = useAppSelector(s => s.resolvedNutritionToday);
+  const sessionDayType = useAppSelector(s => s.sessionDayType);
+  const setSessionDayType = useAppSelector(s => s.setSessionDayType);
+  const showToast = useAppSelector(s => s.showToast);
+  const saveAppDataToCloud = useAppSelector(s => s.saveAppDataToCloud);
+  
+  const nutritionSettings = useAppSelector(s => s.appData.nutritionSettings);
+  const days = useAppSelector(s => s.appData.days);
+  const dietPlans = useAppSelector(s => s.appData.dietPlans);
+  const activeDietPlanId = useAppSelector(s => s.appData.activeDietPlanId);
+  const foodLibrary = useAppSelector(s => s.appData.foodLibrary);
+  const profile = useAppSelector(s => s.appData.profile);
+  
   const [showAddMeal, setShowAddMeal] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
@@ -33,36 +49,36 @@ export default function Nutrition() {
   const [isPhaseReminderDismissed, setIsPhaseReminderDismissed] = useState(false);
 
   const autoPhase = useMemo(() => {
-    const settings = appData.nutritionSettings;
+    const settings = nutritionSettings;
     const start = new Date(settings.startDate).getTime();
     const now = new Date(getTodayStr()).getTime();
     const diffWeeks = Math.floor((now - start) / (7 * 24 * 60 * 60 * 1000));
     return Math.max(0, Math.min(diffWeeks, settings.cutPhases.length - 1));
-  }, [appData.nutritionSettings.startDate, appData.nutritionSettings.cutPhases.length]);
+  }, [nutritionSettings.startDate, nutritionSettings.cutPhases.length]);
 
   const showPhaseReminder = 
-    appData.nutritionSettings.mode === 'cut-phases' && 
-    appData.nutritionSettings.manualPhase !== undefined && 
-    appData.nutritionSettings.manualPhase < autoPhase &&
+    nutritionSettings.mode === 'cut-phases' && 
+    nutritionSettings.manualPhase !== undefined && 
+    nutritionSettings.manualPhase < autoPhase &&
     !isPhaseReminderDismissed;
 
   const today = getTodayStr();
-  const dayData = appData.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
+  const dayData = days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
   
   // Nutrition Settings Draft State
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsDraft, setSettingsDraft] = useState<NutritionSettings>(appData.nutritionSettings);
+  const [settingsDraft, setSettingsDraft] = useState<NutritionSettings>(nutritionSettings);
   const [inputMode, setInputMode] = useState<'grams' | 'percentage'>('grams');
 
   const hasSettingsChanges = useMemo(() => {
-    return JSON.stringify(settingsDraft) !== JSON.stringify(appData.nutritionSettings);
-  }, [settingsDraft, appData.nutritionSettings]);
+    return JSON.stringify(settingsDraft) !== JSON.stringify(nutritionSettings);
+  }, [settingsDraft, nutritionSettings]);
 
   const handleSaveSettings = () => {
-    setAppData({
-      ...appData,
+    setAppData(prev => ({
+      ...prev,
       nutritionSettings: settingsDraft
-    });
+    }));
     setShowSettings(false);
   };
 
@@ -183,7 +199,7 @@ export default function Nutrition() {
           const isRestEmpty = phase.restDay.protein === 0 && phase.restDay.carbs === 0 && phase.restDay.fat === 0;
           
           // Use initialData as fallback source
-          const defaultPhase = appData.nutritionSettings.cutPhases[idx] || appData.nutritionSettings.cutPhases[0];
+          const defaultPhase = nutritionSettings.cutPhases[idx] || nutritionSettings.cutPhases[0];
           
           return {
             trainingDay: isTrainingEmpty ? { ...defaultPhase.trainingDay } : phase.trainingDay,
@@ -191,27 +207,30 @@ export default function Nutrition() {
           };
         });
 
-        const updatedSettings = {
-          ...appData.nutritionSettings,
-          mode: 'cut-phases' as const,
-          cutPhases: validatedPhases,
-          startDate: getTodayStr(), // Reset start date so we start at Phase 1
-          manualPhase: 0 // Reset to Phase 1
-        };
+        setAppData(prev => {
+          const updatedSettings = {
+            ...prev.nutritionSettings,
+            mode: 'cut-phases' as const,
+            cutPhases: validatedPhases,
+            startDate: getTodayStr(), // Reset start date so we start at Phase 1
+            manualPhase: 0 // Reset to Phase 1
+          };
 
-        const updatedData = {
-          ...appData,
-          nutritionSettings: updatedSettings,
-          dietPlans: [...appData.dietPlans, newPlan],
-          activeDietPlanId: planId
-        };
+          const updatedData = {
+            ...prev,
+            nutritionSettings: updatedSettings,
+            dietPlans: [...prev.dietPlans, newPlan],
+            activeDietPlanId: planId
+          };
 
-        setAppData(updatedData);
-        
-        // Fix: Immediately sync to cloud to prevent race condition where Firebase listener overwrites local state with old data
-        saveAppDataToCloud(updatedData).catch(err => {
-          console.error("Failed to sync imported plan to cloud:", err);
+          // Fix: Immediately sync to cloud to prevent race condition where Firebase listener overwrites local state with old data
+          saveAppDataToCloud(updatedData).catch(err => {
+            console.error("Failed to sync imported plan to cloud:", err);
+          });
+
+          return updatedData;
         });
+        
         setShowImport(false);
         setImportText("");
         showToast(t("importSuccess" as any));
@@ -226,7 +245,6 @@ export default function Nutrition() {
 
   const applySuggestedMeal = (meal: SuggestedMeal) => {
     const today = getTodayStr();
-    const dayData = appData.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
     
     const newMeal: CustomMeal = {
       id: Math.random().toString(36).substr(2, 9),
@@ -239,21 +257,24 @@ export default function Nutrition() {
       updatedAt: Date.now()
     };
 
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          meals: [...(dayData.meals || []), newMeal]
+    setAppData(prev => {
+      const dayData = prev.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            meals: [...(dayData.meals || []), newMeal]
+          }
         }
-      }
+      };
     });
     showToast(t("add" as any) + " " + meal.name);
   };
 
   const applyAllSuggestedMeals = () => {
-    const activePlan = appData.dietPlans.find(p => p.id === appData.activeDietPlanId) || appData.dietPlans[0];
+    const activePlan = dietPlans.find(p => p.id === activeDietPlanId) || dietPlans[0];
     if (!activePlan) return;
 
     const currentPhase = resolvedNutritionToday.metadata.currentPhase;
@@ -276,23 +297,25 @@ export default function Nutrition() {
     }));
 
     const today = getTodayStr();
-    const dayData = appData.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
 
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          meals: [...(dayData.meals || []), ...newMeals]
+    setAppData(prev => {
+      const dayData = prev.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            meals: [...(dayData.meals || []), ...newMeals]
+          }
         }
-      }
+      };
     });
     showToast(t("importSuccess" as any));
   };
 
   const applyMergedMeals = () => {
-    const activePlan = appData.dietPlans.find(p => p.id === appData.activeDietPlanId) || appData.dietPlans[0];
+    const activePlan = dietPlans.find(p => p.id === activeDietPlanId) || dietPlans[0];
     if (!activePlan) return;
 
     const currentPhase = resolvedNutritionToday.metadata.currentPhase;
@@ -318,17 +341,19 @@ export default function Nutrition() {
     };
 
     const today = getTodayStr();
-    const dayData = appData.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
 
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          meals: [...(dayData.meals || []), mergedMeal]
+    setAppData(prev => {
+      const dayData = prev.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            meals: [...(dayData.meals || []), mergedMeal]
+          }
         }
-      }
+      };
     });
 
     setSelectedSuggestions([]);
@@ -337,66 +362,61 @@ export default function Nutrition() {
   };
 
   const handleDeleteMeal = (mealId: string) => {
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          meals: dayData.meals.map(m => 
-            m.id === mealId ? { ...m, deleted: true, updatedAt: Date.now() } : m
-          )
+    setAppData(prev => {
+      const dayData = prev.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            meals: (dayData.meals || []).map(m => 
+              m.id === mealId ? { ...m, deleted: true, updatedAt: Date.now() } : m
+            )
+          }
         }
-      }
+      };
     });
   };
 
   const handleClearAll = () => {
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          meals: dayData.meals.map(m => ({ ...m, deleted: true, updatedAt: Date.now() }))
+    setAppData(prev => {
+      const dayData = prev.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            meals: (dayData.meals || []).map(m => ({ ...m, deleted: true, updatedAt: Date.now() }))
+          }
         }
-      }
+      };
     });
     setShowClearConfirm(false);
   };
 
   const handleDeletePlan = () => {
-    if (appData.dietPlans.length <= 1) {
+    if (dietPlans.length <= 1) {
       showToast("At least one plan must be kept", "error");
       return;
     }
 
-    const planToDeleteId = appData.activeDietPlanId || appData.dietPlans[0].id;
-    const remainingPlans = appData.dietPlans.filter(p => p.id !== planToDeleteId);
-    const nextPlan = remainingPlans[0];
+    setAppData(prev => {
+      const planToDeleteId = prev.activeDietPlanId || prev.dietPlans[0].id;
+      const remainingPlans = prev.dietPlans.filter(p => p.id !== planToDeleteId);
+      const nextPlan = remainingPlans[0];
 
-    // Map next plan's templates to cutPhases format
-    const nextCutPhases = nextPlan.templates.map(t => ({
-      trainingDay: { protein: 0, carbs: 0, fat: 0 }, // We'll need to find the goals from the template or keep current if not found
-      restDay: { protein: 0, carbs: 0, fat: 0 }
-    }));
-    
-    // Actually, the templates don't store the goals directly in a simple way in the current structure
-    // Wait, the import logic creates both newPlan (templates) and updatedSettings (cutPhases)
-    // This means dietPlans and nutritionSettings.cutPhases are somewhat redundant or linked.
-    
-    // Let's just remove from dietPlans and if it was active, switch activeId.
-    // If the user wants to "Apply" a plan, they usually do it via import.
-    // But if they just switch in the dropdown, we should probably update the settings too.
-    
-    const updatedData = {
-      ...appData,
-      dietPlans: remainingPlans,
-      activeDietPlanId: nextPlan.id
-    };
+      const updatedData = {
+        ...prev,
+        dietPlans: remainingPlans,
+        activeDietPlanId: nextPlan.id
+      };
+      
+      saveAppDataToCloud(updatedData);
+      return updatedData;
+    });
 
-    setAppData(updatedData);
-    saveAppDataToCloud(updatedData);
     setShowDeletePlanConfirm(false);
     showToast("Diet plan deleted");
   };
@@ -431,36 +451,38 @@ export default function Nutrition() {
       deleted: false
     };
 
-    // Update food library with composite key logic
-    const foodId = `${newMeal.name.toLowerCase()}-${amount}`; // Simplified for now
-    const existingFood = appData.foodLibrary.find(f => f.name.toLowerCase() === newMeal.name.toLowerCase());
-    
-    let updatedLibrary = [...appData.foodLibrary];
-    if (!existingFood) {
-      updatedLibrary.push({
-        id: Date.now().toString(),
-        name: newMeal.name,
-        state: 'raw',
-        nutrientsPer100g: {
-          protein: Number(newMeal.protein) || 0,
-          carbs: Number(newMeal.carbs) || 0,
-          fat: Number(newMeal.fat) || 0
-        },
-        userOverride: false,
-        source: 'user'
-      });
-    }
-
-    setAppData({
-      ...appData,
-      foodLibrary: updatedLibrary,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          meals: [...(dayData.meals || []), meal]
-        }
+    setAppData(prev => {
+      const existingFood = prev.foodLibrary.find(f => f.name.toLowerCase() === newMeal.name.toLowerCase());
+      
+      let updatedLibrary = [...prev.foodLibrary];
+      if (!existingFood) {
+        updatedLibrary.push({
+          id: Date.now().toString(),
+          name: newMeal.name,
+          state: 'raw',
+          nutrientsPer100g: {
+            protein: Number(newMeal.protein) || 0,
+            carbs: Number(newMeal.carbs) || 0,
+            fat: Number(newMeal.fat) || 0
+          },
+          userOverride: false,
+          source: 'user'
+        });
       }
+
+      const dayData = prev.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
+
+      return {
+        ...prev,
+        foodLibrary: updatedLibrary,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            meals: [...(dayData.meals || []), meal]
+          }
+        }
+      };
     });
     setShowAddMeal(false);
     setNewMeal({ 
@@ -500,25 +522,27 @@ export default function Nutrition() {
       updatedAt: Date.now()
     };
     
-    const today = getTodayStr();
-    const dayData = appData.days[today];
-    if (!dayData) return;
+    setAppData(prev => {
+      const dayData = prev.days[today];
+      if (!dayData) return prev;
 
-    const updatedData = {
-      ...appData,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          meals: dayData.meals.map(m => 
-            m.id === finalDraft.id ? finalDraft : m
-          )
+      const updatedData = {
+        ...prev,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            meals: dayData.meals.map(m => 
+              m.id === finalDraft.id ? finalDraft : m
+            )
+          }
         }
-      }
-    };
+      };
 
-    setAppData(updatedData);
-    saveAppDataToCloud(updatedData);
+      saveAppDataToCloud(updatedData);
+      return updatedData;
+    });
+
     setSelectedMeal(finalDraft);
     setIsEditingMeal(false);
     showToast("Meal updated");
@@ -529,17 +553,20 @@ export default function Nutrition() {
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toLocaleDateString('en-CA');
     
-    const tomorrowData = appData.days[tomorrowStr] || { date: tomorrowStr, steps: 0, water: 0, meals: [], workoutSessions: [] };
-    
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [tomorrowStr]: {
-          ...tomorrowData,
-          meals: [...(tomorrowData.meals || []), ...dayData.meals]
+    setAppData(prev => {
+      const tomorrowData = prev.days[tomorrowStr] || { date: tomorrowStr, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      const todayData = prev.days[today] || { meals: [] };
+      
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [tomorrowStr]: {
+            ...tomorrowData,
+            meals: [...(tomorrowData.meals || []), ...(todayData.meals || [])]
+          }
         }
-      }
+      };
     });
   };
 
@@ -550,7 +577,7 @@ export default function Nutrition() {
         <div className="flex gap-2">
           <button 
             onClick={() => {
-              setSettingsDraft(appData.nutritionSettings);
+              setSettingsDraft(nutritionSettings);
               setShowSettings(true);
             }}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.06] text-white/60 hover:bg-white/[0.08] hover:text-white transition-all"
@@ -590,10 +617,10 @@ export default function Nutrition() {
               </button>
               <button 
                 onClick={() => {
-                  setAppData({
-                    ...appData,
-                    nutritionSettings: { ...appData.nutritionSettings, manualPhase: autoPhase }
-                  });
+                  setAppData(prev => ({
+                    ...prev,
+                    nutritionSettings: { ...prev.nutritionSettings, manualPhase: autoPhase }
+                  }));
                 }}
                 className="rounded-lg bg-purple-500 px-3 py-2 text-[10px] font-bold uppercase text-white"
               >
@@ -631,34 +658,34 @@ export default function Nutrition() {
             {/* Scrollable Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-0">
               {/* Plan Selection (Multi-Plan Support) */}
-              {appData.dietPlans.length > 0 && (
+              {dietPlans.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{t("dietPlan" as any) || "Diet Plan"}</p>
                   <div className="flex gap-2">
                     <select 
                       className="flex-1 rounded-xl bg-white/[0.06] p-3 text-xs font-bold outline-none border border-white/5"
-                      value={appData.activeDietPlanId || ""}
-                      onChange={(e) => setAppData({ ...appData, activeDietPlanId: e.target.value })}
+                      value={activeDietPlanId || ""}
+                      onChange={(e) => setAppData(prev => ({ ...prev, activeDietPlanId: e.target.value }))}
                     >
-                      {appData.dietPlans.map(plan => (
+                      {dietPlans.map(plan => (
                         <option key={plan.id} value={plan.id} className="bg-gray-900">{plan.name}</option>
                       ))}
                     </select>
                     <button
                       onClick={() => {
-                        if (appData.dietPlans.length <= 1) {
+                        if (dietPlans.length <= 1) {
                           showToast("At least one plan must be kept", "error");
                         } else {
                           setShowDeletePlanConfirm(true);
                         }
                       }}
-                      disabled={appData.dietPlans.length <= 1}
+                      disabled={dietPlans.length <= 1}
                       className={`rounded-xl p-3 transition-all ${
-                        appData.dietPlans.length <= 1 
+                        dietPlans.length <= 1 
                           ? "bg-white/5 text-white/10 cursor-not-allowed" 
                           : "bg-red-500/10 text-red-400 hover:bg-red-500/20"
                       }`}
-                      title={appData.dietPlans.length <= 1 ? "At least one plan must be kept" : "Delete Plan"}
+                      title={dietPlans.length <= 1 ? "At least one plan must be kept" : "Delete Plan"}
                     >
                       <Trash2 size={18} />
                     </button>
@@ -874,28 +901,28 @@ export default function Nutrition() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h2 className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("currentMode")}</h2>
-              <p className="text-sm font-bold text-blue-400">{t(appData.nutritionSettings.mode as any)}</p>
+              <p className="text-sm font-bold text-blue-400">{t(nutritionSettings.mode as any)}</p>
             </div>
             <div className="flex items-center gap-2">
-               {appData.nutritionSettings.mode === 'carb-cycling' ? (
+               {nutritionSettings.mode === 'carb-cycling' ? (
                  <div className="flex gap-1 rounded-xl bg-white/[0.06] p-1">
                    {(['high', 'medium', 'low'] as const).map(type => (
                      <button
                        key={type}
                        onClick={() => {
-                         setAppData({
-                           ...appData,
+                         setAppData(prev => ({
+                           ...prev,
                            days: {
-                             ...appData.days,
+                             ...prev.days,
                              [today]: {
-                               ...(appData.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] }),
+                               ...(prev.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] }),
                                manualCarbDay: type
                              }
                            }
-                         });
+                         }));
                        }}
                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
-                         (appData.days[today]?.manualCarbDay || 'medium') === type 
+                         (days[today]?.manualCarbDay || 'medium') === type 
                            ? "bg-white text-black shadow-lg" 
                            : "text-white/40 hover:text-white"
                        }`}
@@ -926,7 +953,7 @@ export default function Nutrition() {
             </div>
           </div>
 
-          {appData.nutritionSettings.mode === 'cut-phases' && (
+          {nutritionSettings.mode === 'cut-phases' && (
             <div className="flex items-center justify-between rounded-xl bg-white/[0.06] p-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/20 text-purple-400">
@@ -939,13 +966,13 @@ export default function Nutrition() {
               </div>
               <select 
                 className="bg-transparent text-xs font-bold outline-none"
-                value={appData.nutritionSettings.manualPhase ?? resolvedNutritionToday.metadata.currentPhase}
-                onChange={(e) => setAppData({
-                  ...appData,
-                  nutritionSettings: { ...appData.nutritionSettings, manualPhase: Number(e.target.value) }
-                })}
+                value={nutritionSettings.manualPhase ?? resolvedNutritionToday.metadata.currentPhase}
+                onChange={(e) => setAppData(prev => ({
+                  ...prev,
+                  nutritionSettings: { ...prev.nutritionSettings, manualPhase: Number(e.target.value) }
+                }))}
               >
-                {appData.nutritionSettings.cutPhases.map((_, i) => (
+                {nutritionSettings.cutPhases.map((_, i) => (
                   <option key={i} value={i} className="bg-gray-900">Phase {i + 1}</option>
                 ))}
               </select>
@@ -954,13 +981,13 @@ export default function Nutrition() {
         </GlassCard>
 
         {/* Suggestion Shelf */}
-        {appData.nutritionSettings.mode === 'cut-phases' && appData.dietPlans.length > 0 && (
+        {nutritionSettings.mode === 'cut-phases' && dietPlans.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <Sparkles size={14} className="text-purple-400" />
                 <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-                  {appData.nutritionSettings.mode === 'cut-phases' ? (
+                  {nutritionSettings.mode === 'cut-phases' ? (
                     `${t("phase")} ${resolvedNutritionToday.metadata.currentPhase + 1} ${t("suggestions" as any) || "Suggestions"}`
                   ) : (
                     t("suggestions" as any) || "Suggestions"
@@ -990,7 +1017,7 @@ export default function Nutrition() {
 
             <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar flex-nowrap">
               {(() => {
-                const activePlan = appData.dietPlans.find(p => p.id === appData.activeDietPlanId) || appData.dietPlans[0];
+                const activePlan = dietPlans.find(p => p.id === activeDietPlanId) || dietPlans[0];
                 const template = activePlan?.templates.find(t => t.phase === resolvedNutritionToday.metadata.currentPhase);
                 const meals = resolvedNutritionToday.metadata.currentDayType === 'training' ? template?.trainingMeals : template?.restMeals;
                 
@@ -1209,7 +1236,7 @@ export default function Nutrition() {
                         <X size={12} />
                       </button>
                     </div>
-                    {appData.foodLibrary
+                    {foodLibrary
                       .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
                       .map(food => (
                         <button
@@ -1232,7 +1259,7 @@ export default function Nutrition() {
                           </p>
                         </button>
                       ))}
-                    {appData.foodLibrary.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
+                    {foodLibrary.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
                       <p className="p-3 text-center text-xs text-white/20">No matching foods found</p>
                     )}
                   </div>
