@@ -80,38 +80,18 @@ export default function Dashboard() {
   const bmr = useMemo(() => calculateBMR(appData.profile), [calculateBMR, appData.profile]);
   const workoutCalories = useMemo(() => (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0), [dayData.workoutSessions]);
   
-  const streak = useMemo(() => {
-    let count = 0;
-    const todayStr = getTodayStr();
-    let checkDate = new Date();
-    
-    const todayData = appData.days[todayStr];
-    const hasWorkoutToday = todayData?.workoutSessions?.some(s => !s.deleted && s.exercises && s.exercises.length > 0);
-    
-    if (hasWorkoutToday) {
-      count++;
-      checkDate.setDate(checkDate.getDate() - 1);
-    } else {
-      checkDate.setDate(checkDate.getDate() - 1);
-    }
-
-    while (true) {
-      const dateStr = checkDate.toLocaleDateString('en-CA');
-      const day = appData.days[dateStr];
-      const hasWorkout = day?.workoutSessions?.some(s => !s.deleted && s.exercises && s.exercises.length > 0);
-
-      if (hasWorkout) {
-        count++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else {
-        break;
-      }
-      if (count > 3650) break;
-    }
-    return count;
-  }, [appData.days]);
-
   const dailyDeficit = useMemo(() => (bmr + workoutCalories) - resolvedNutritionToday.calories.consumed, [bmr, workoutCalories, resolvedNutritionToday.calories.consumed]);
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    const name = appData.profile.name || "McDull";
+    if (hour < 5) return { title: `Hi, ${name}`, sub: "深夜还在坚持？记得早点休息。" };
+    if (hour < 12) return { title: `早上好, ${name}`, sub: "今天也是刷脂的好天气！" };
+    if (hour < 18) return { title: `下午好, ${name}`, sub: "保持状态，离目标又近了一步。" };
+    return { title: `晚上好, ${name}`, sub: "回顾今天，好好恢复。" };
+  };
+
+  const greeting = getGreeting();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -171,7 +151,7 @@ export default function Dashboard() {
   }, [appData, setAppData]);
 
   const isEnabled = (id: string) => (appData.enabledWidgets || []).includes(id);
-  const enabledWidgets = appData.enabledWidgets || ['weight', 'bodyFat', 'calories', 'deficit', 'activity', 'water', 'quickWorkout', 'quickMeal', 'streak'];
+  const enabledWidgets = appData.enabledWidgets || ['quickWorkout', 'quickMeal', 'weight', 'bodyFat', 'calories', 'deficit', 'activity', 'water', 'streak'];
 
   const getTimeSlot = () => {
     const hour = new Date().getHours();
@@ -217,7 +197,7 @@ export default function Dashboard() {
       case 'deficit':
         return <DeficitWidget deficit={dailyDeficit} goal={appData.profile.goalDeficit} t={t} />;
       case 'streak':
-        return <StreakWidget streak={streak} t={t} />;
+        return <StreakWidget appData={appData} t={t} />;
       case 'bodyFat':
         return (
           <BodyFatWidget 
@@ -245,9 +225,9 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between px-4">
         <div>
-          <h1 className="text-3xl font-black tracking-tight">{t("dashboard")}</h1>
-          <p className="text-xs font-bold uppercase tracking-widest text-white/40">
-            {new Date(selectedDate).toLocaleDateString(language, { weekday: 'long', month: 'long', day: 'numeric' })}
+          <h1 className="text-3xl font-black tracking-tight">{greeting.title}</h1>
+          <p className="text-sm text-white/40 mt-1 font-medium">
+            {greeting.sub}
           </p>
         </div>
         <div className="flex items-center gap-3">
