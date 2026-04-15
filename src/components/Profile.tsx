@@ -130,11 +130,11 @@ export default function Profile() {
     const month = currentMonth.getMonth();
     const totalDays = daysInMonth(year, month);
     const startDay = firstDayOfMonth(year, month);
-    const days = [];
+    const calendarDays = [];
 
     // Empty slots for previous month
     for (let i = 0; i < (startDay === 0 ? 6 : startDay - 1); i++) {
-      days.push(<div key={`empty-${i}`} className="h-10 w-10" />);
+      calendarDays.push(<div key={`empty-${i}`} className="h-10 w-10" />);
     }
 
     for (let d = 1; d <= totalDays; d++) {
@@ -142,7 +142,7 @@ export default function Profile() {
       const hasData = days[dateStr];
       const isToday = getTodayStr() === dateStr;
 
-      days.push(
+      calendarDays.push(
         <div 
           key={d} 
           onClick={() => {
@@ -154,14 +154,14 @@ export default function Profile() {
           } ${isToday ? "ring-2 ring-blue-500" : ""}`}
         >
           {d}
-          {hasData && hasData.done && (
+          {hasData && (hasData.meals?.length > 0 || hasData.workoutSessions?.length > 0) && (
             <div className="absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-white" />
           )}
         </div>
       );
     }
 
-    return days;
+    return calendarDays;
   };
 
   return (
