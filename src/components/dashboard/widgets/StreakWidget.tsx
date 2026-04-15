@@ -78,7 +78,7 @@ const StreakWidget = () => {
           >
             {streak}
           </motion.span>
-          <span className="text-xs text-white/40">{t("days" as any) || "d"}</span>
+          <span className="text-xs text-white/40">{t("daysUnit" as any) || "d"}</span>
         </div>
         <p className="text-[10px] text-white/40">
           {streak > 0 ? t("keepGoing" as any) || "Keep it up!" : t("startToday" as any) || "Start today!"}
