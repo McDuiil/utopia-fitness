@@ -59,6 +59,7 @@ export interface WorkoutSession {
   calories: number;
   category?: string;
   manualDuration?: number;
+  notes?: string;
   updatedAt?: number;
   deleted?: boolean;
   archived?: boolean;
