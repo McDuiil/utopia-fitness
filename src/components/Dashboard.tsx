@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { Settings, X, Check, AlertCircle, GripVertical, CheckCircle2, Play, Plus, Utensils } from "lucide-react"; // 补齐了图标引用
+import { Settings, X, Check, AlertCircle, GripVertical, CheckCircle2, Play, Plus, Utensils } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { useApp } from "@/src/context/AppContext";
 import { getTodayStr } from "../lib/utils";
@@ -73,30 +73,42 @@ export default function Dashboard() {
   const [showWidgetManager, setShowWidgetManager] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // 【核心防御门】：如果在初始化中，不渲染任何依赖数据的逻辑
+  // 【第一层保护：全局数据总闸】
+  // 报错根本原因是 appData 为空时，下方的 useMemo 强行执行。
+  // 必须在执行任何业务逻辑前拦截！
   if (!appData || !appData.days || !appData.profile) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-white/40 text-xs tracking-widest uppercase">Initializing Utopia...</p>
-        </div>
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+        <p className="text-white/40 text-xs font-bold tracking-widest uppercase italic">Utopia Loading...</p>
       </div>
     );
   }
   
   const today = getTodayStr();
   const isHistory = selectedDate !== today;
-  const dayData = useMemo(() => appData.days[selectedDate] || { date: selectedDate, steps: 0, water: 0, meals: [], workoutSessions: [] }, [appData.days, selectedDate]);
   
-  const bmr = useMemo(() => calculateBMR(appData.profile), [calculateBMR, appData.profile]);
-  const workoutCalories = useMemo(() => (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0), [dayData.workoutSessions]);
+  // 【第二层保护：安全取值】使用可选链
+  const dayData = useMemo(() => {
+    return appData.days?.[selectedDate] || { date: selectedDate, steps: 0, water: 0, meals: [], workoutSessions: [] };
+  }, [appData.days, selectedDate]);
   
-  const dailyDeficit = useMemo(() => (bmr + workoutCalories) - (resolvedNutritionToday?.calories?.consumed || 0), [bmr, workoutCalories, resolvedNutritionToday]);
+  const bmr = useMemo(() => {
+    return calculateBMR ? calculateBMR(appData.profile) : 1600;
+  }, [calculateBMR, appData.profile]);
+
+  const workoutCalories = useMemo(() => {
+    return (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0);
+  }, [dayData.workoutSessions]);
+  
+  const dailyDeficit = useMemo(() => {
+    const consumed = resolvedNutritionToday?.calories?.consumed || 0;
+    return (bmr + workoutCalories) - consumed;
+  }, [bmr, workoutCalories, resolvedNutritionToday]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    const name = appData.profile.name || "McDull";
+    const name = appData.profile?.name || "McDull";
     if (hour < 5) return { title: `Hi, ${name}`, sub: "深夜还在坚持？记得早点休息。" };
     if (hour < 12) return { title: `早上好, ${name}`, sub: "今天也是刷脂的好天气！" };
     if (hour < 18) return { title: `下午好, ${name}`, sub: "保持状态，离目标又近了一步。" };
@@ -174,36 +186,14 @@ export default function Dashboard() {
   };
 
   const renderWidget = (id: string) => {
+    // 【第三层保护：组件内部数据隔离】
     switch (id) {
       case 'quickWorkout':
-        return (
-          <QuickActionWidget 
-            type="workout"
-            label={t("startWorkout")}
-            subLabelText={t("quickStart")}
-            onClick={() => setActiveTab('workouts')}
-          />
-        );
+        return <QuickActionWidget type="workout" label={t("startWorkout")} subLabelText={t("quickStart")} onClick={() => setActiveTab('workouts')} />;
       case 'quickMeal':
-        return (
-          <QuickActionWidget 
-            type="meal"
-            label={t("quickLog")}
-            subLabelText={getTimeSlot()}
-            onClick={() => setActiveTab('nutrition')}
-          />
-        );
+        return <QuickActionWidget type="meal" label={t("quickLog")} subLabelText={getTimeSlot()} onClick={() => setActiveTab('nutrition')} />;
       case 'weight':
-        return (
-          <WeightWidget 
-            selectedDate={selectedDate}
-            dayData={dayData}
-            appData={appData}
-            isHistory={isHistory}
-            t={t}
-            onUpdateWeight={handleUpdateWeight}
-          />
-        );
+        return <WeightWidget selectedDate={selectedDate} dayData={dayData} appData={appData} isHistory={isHistory} t={t} onUpdateWeight={handleUpdateWeight} />;
       case 'calories':
         return <CaloriesWidget nutrition={resolvedNutritionToday} t={t} />;
       case 'deficit':
@@ -211,16 +201,7 @@ export default function Dashboard() {
       case 'streak':
         return <StreakWidget days={appData.days} name={appData.profile.name} t={t} />;
       case 'bodyFat':
-        return (
-          <BodyFatWidget 
-            bodyFat={dayData.bodyFat}
-            profileBodyFat={appData.profile.bodyFat}
-            goalBodyFat={appData.profile.goalBodyFat}
-            isHistory={isHistory}
-            t={t}
-            onClick={() => setActiveTab('profile')}
-          />
-        );
+        return <BodyFatWidget bodyFat={dayData.bodyFat} profileBodyFat={appData.profile.bodyFat} goalBodyFat={appData.profile.goalBodyFat} isHistory={isHistory} t={t} onClick={() => setActiveTab('profile')} />;
       case 'steps':
         return <StepsWidget steps={dayData.steps || 0} goal={appData.profile.goalSteps || 10000} t={t} />;
       case 'activity':
@@ -233,14 +214,12 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-6 pb-32 pt-[calc(2rem+env(safe-area-inset-top,0px))]">
+    <div className="space-y-6 pb-32 pt-[calc(2rem+env(safe-area-inset-top,0px))] bg-black min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between px-4">
         <div>
-          <h1 className="text-3xl font-black tracking-tight">{greeting.title}</h1>
-          <p className="text-sm text-white/40 mt-1 font-medium">
-            {greeting.sub}
-          </p>
+          <h1 className="text-3xl font-black tracking-tight text-white">{greeting.title}</h1>
+          <p className="text-sm text-white/40 mt-1 font-medium">{greeting.sub}</p>
         </div>
         <div className="flex items-center gap-3">
           <button 
@@ -323,7 +302,7 @@ export default function Dashboard() {
       </DndContext>
 
       {/* Late Night Coach Suggestion */}
-      {!isHistory && new Date().getHours() >= 22 && resolvedNutritionToday && (
+      {!isHistory && new Date().getHours() >= 22 && resolvedNutritionToday?.remaining && (
         <div className="px-4">
           <GlassCard className="p-4 border-yellow-500/30 bg-yellow-500/10 flex items-start gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-500 text-black">
@@ -334,7 +313,7 @@ export default function Dashboard() {
               <p className="text-xs text-white/70">
                 {resolvedNutritionToday.remaining.protein > 20 
                   ? t("proteinDeficitSuggestion")
-                  : resolvedNutritionToday.remaining.carbs < -30
+                  : (resolvedNutritionToday.remaining.carbs || 0) < -30
                     ? t("carbExcessSuggestion")
                     : t("goalAchievedSuggestion")
                 }
