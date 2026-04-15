@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { Settings, X, Check, AlertCircle, GripVertical, CheckCircle2, Play, Plus } from "lucide-react";
+import { Settings, X, Check, AlertCircle, GripVertical, CheckCircle2, Play, Plus, Utensils } from "lucide-react"; // 补齐了图标引用
 import GlassCard from "./GlassCard";
 import { useApp } from "@/src/context/AppContext";
 import { getTodayStr } from "../lib/utils";
@@ -72,6 +72,18 @@ export default function Dashboard() {
   const { t, appData, language, calculateBMR, setAppData, selectedDate, setSelectedDate, setActiveTab, resolvedNutritionToday } = useApp();
   const [showWidgetManager, setShowWidgetManager] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  // 【核心防御门】：如果在初始化中，不渲染任何依赖数据的逻辑
+  if (!appData || !appData.days || !appData.profile) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-white/40 text-xs tracking-widest uppercase">Initializing Utopia...</p>
+        </div>
+      </div>
+    );
+  }
   
   const today = getTodayStr();
   const isHistory = selectedDate !== today;
@@ -80,7 +92,7 @@ export default function Dashboard() {
   const bmr = useMemo(() => calculateBMR(appData.profile), [calculateBMR, appData.profile]);
   const workoutCalories = useMemo(() => (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0), [dayData.workoutSessions]);
   
-  const dailyDeficit = useMemo(() => (bmr + workoutCalories) - resolvedNutritionToday.calories.consumed, [bmr, workoutCalories, resolvedNutritionToday.calories.consumed]);
+  const dailyDeficit = useMemo(() => (bmr + workoutCalories) - (resolvedNutritionToday?.calories?.consumed || 0), [bmr, workoutCalories, resolvedNutritionToday]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -241,7 +253,7 @@ export default function Dashboard() {
           </button>
           <div className="h-12 w-12 rounded-full border border-white/20 bg-white/[0.06] p-1">
             <img
-              src={appData.profile?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=Felix`}
+              src={appData.profile?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=McDull`}
               alt="Avatar"
               className="h-full w-full rounded-full"
               referrerPolicy="no-referrer"
@@ -311,7 +323,7 @@ export default function Dashboard() {
       </DndContext>
 
       {/* Late Night Coach Suggestion */}
-      {!isHistory && new Date().getHours() >= 22 && (
+      {!isHistory && new Date().getHours() >= 22 && resolvedNutritionToday && (
         <div className="px-4">
           <GlassCard className="p-4 border-yellow-500/30 bg-yellow-500/10 flex items-start gap-4">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-500 text-black">
