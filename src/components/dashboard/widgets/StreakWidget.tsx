@@ -1,14 +1,49 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import { Award } from "lucide-react";
 import { motion } from "motion/react";
 import GlassCard from "../../GlassCard";
+import { AppData } from "../../../types";
+import { getTodayStr } from "../../../lib/utils";
 
 interface StreakWidgetProps {
-  streak: number;
+  appData: AppData;
   t: (key: string) => string;
 }
 
-const StreakWidget = memo(({ streak, t }: StreakWidgetProps) => {
+const StreakWidget = memo(({ appData, t }: StreakWidgetProps) => {
+  const streak = useMemo(() => {
+    let count = 0;
+    const todayStr = getTodayStr();
+    let checkDate = new Date();
+    let isFirstDay = true;
+    
+    // Check backwards from today
+    while (true) {
+      const dateStr = checkDate.toLocaleDateString('en-CA');
+      const day = appData.days[dateStr];
+      
+      // Active if has workout OR has meals logged
+      const hasWorkout = day?.workoutSessions?.some(s => !s.deleted && s.exercises && s.exercises.length > 0);
+      const hasMeals = day?.meals && day.meals.length > 0;
+
+      if (hasWorkout || hasMeals) {
+        count++;
+      } else {
+        // If it's today and no activity yet, don't break the streak, just check yesterday
+        // But if we already found activity in the "future" (relative to this check), 
+        // or if this isn't the first day we're checking, then a gap breaks the streak.
+        if (!isFirstDay) {
+          break;
+        }
+      }
+      
+      checkDate.setDate(checkDate.getDate() - 1);
+      isFirstDay = false;
+      if (count > 3650) break; // Safety break
+    }
+    return count;
+  }, [appData.days]);
+
   const percentage = Math.min(100, (streak / 7) * 100);
 
   return (
@@ -50,7 +85,7 @@ const StreakWidget = memo(({ streak, t }: StreakWidgetProps) => {
     </motion.div>
   );
 }, (prev, next) => {
-  return prev.streak === next.streak;
+  return prev.appData.days === next.appData.days;
 });
 
 StreakWidget.displayName = "StreakWidget";
