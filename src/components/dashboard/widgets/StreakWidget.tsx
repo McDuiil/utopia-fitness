@@ -13,47 +13,9 @@ interface StreakWidgetProps {
 
 const StreakWidget = memo(({ days, name, t }: StreakWidgetProps) => {
   const streak = useMemo(() => {
-    console.log("Streak 扫描天数:", Object.keys(days).length);
-    
-    const now = new Date();
-    const hour = now.getHours();
-    
-    // 审查起点判定
-    let checkDate = new Date();
-    if (hour < 4) {
-      // 凌晨宽限：4点前算昨天
-      checkDate.setDate(checkDate.getDate() - 1);
-    }
-    
-    let count = 0;
-    let isCheckingToday = true;
-    
-    // Check backwards from today
-    while (true) {
-      const dateStr = checkDate.toLocaleDateString('en-CA');
-      const day = days[dateStr];
-      
-      // 三位一体判定标准：饮食、训练、身体指标
-      const hasMeals = day?.meals && day.meals.length > 0;
-      const hasWorkout = day?.workoutSessions && day.workoutSessions.length > 0;
-      const hasMetrics = day?.weight !== undefined || day?.bodyFat !== undefined;
-
-      if (hasMeals || hasWorkout || hasMetrics) {
-        count++;
-      } else {
-        // 晚间保护：22:00前，如果今天没记录，不中断，继续看昨天
-        if (isCheckingToday && hour < 22) {
-          // 不加 count，但也不 break
-        } else {
-          break;
-        }
-      }
-      
-      checkDate.setDate(checkDate.getDate() - 1);
-      isCheckingToday = false;
-      if (count > 3650) break; // Safety break
-    }
-    return count;
+    if (!days) return 0;
+    // Simple count for debugging
+    return Object.keys(days).length;
   }, [days]);
 
   const percentage = Math.min(100, (streak / 7) * 100);
