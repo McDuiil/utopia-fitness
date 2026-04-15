@@ -12,36 +12,29 @@ interface StreakWidgetProps {
 
 const StreakWidget = memo(({ days, name, t }: StreakWidgetProps) => {
   const streak = useMemo(() => {
-    // 【第一道防线】绝对空值保护，防止 Object.keys 崩溃
-    if (!days || typeof days !== 'object') {
-      console.log("StreakWidget: 等待数据加载中...");
-      return 0;
-    }
+    // 【坚固化保护】确保 days 是有效的对象，防止 Object.keys 裸奔导致崩溃
+    if (!days || typeof days !== 'object') return 0;
 
     try {
       const dayKeys = Object.keys(days);
       if (dayKeys.length === 0) return 0;
 
-      // 调试日志：确认是否读取到了 3 月的历史记录
-      console.log("Streak 扫描天数:", dayKeys.length);
-
       let count = 0;
       let checkDate = new Date();
       
-      // 【逻辑补丁】凌晨 0-4 点逻辑：若此时没记录，自动回溯从昨天开始算
+      // 【人性化宽限】凌晨 0-4 点逻辑：若此时没记录，自动回溯从昨天开始算
       if (checkDate.getHours() < 4) {
         checkDate.setDate(checkDate.getDate() - 1);
       }
 
       const todayStr = new Date().toISOString().split('T')[0];
-      let safetyNet = 500; // 安全锁：防止任何意外导致的死循环
+      let safetyNet = 500; // 绝对安全锁，防止死循环
 
       while (safetyNet > 0) {
-        // 格式化为 YYYY-MM-DD 以匹配数据库 Key
         const dateKey = checkDate.toISOString().split('T')[0];
         const dayData = days[dateKey];
 
-        // 【活跃判定】饮食记录 OR 训练记录 OR 体重/体脂更新
+        // 【核心算法】三位一体活跃判定：饮食记录 OR 训练记录(未删除) OR 体重/体脂更新
         const isActive = dayData && (
           (dayData.meals && dayData.meals.length > 0) || 
           (dayData.workoutSessions && dayData.workoutSessions.some(s => !s.deleted)) ||
@@ -52,13 +45,13 @@ const StreakWidget = memo(({ days, name, t }: StreakWidgetProps) => {
           count++;
           checkDate.setDate(checkDate.getDate() - 1);
         } else {
-          // 【晚间宽限】如果是今天且还没到晚上 22:00，跳过今天继续回溯，不计入中断
+          // 【晚间宽限】如果是今天且还没到晚上 22:00，跳过今天继续回溯
           if (dateKey === todayStr && new Date().getHours() < 22) {
             checkDate.setDate(checkDate.getDate() - 1);
             safetyNet--;
             continue;
           }
-          break; // 真正的连续中断点
+          break; // 真正的连续记录中断
         }
         safetyNet--;
       }
@@ -69,7 +62,7 @@ const StreakWidget = memo(({ days, name, t }: StreakWidgetProps) => {
     }
   }, [days]);
 
-  // 以 30 天为一个视觉周期进度条
+  // 以 30 天为一个视觉进度周期
   const percentage = Math.min(100, (streak / 30) * 100);
 
   return (
@@ -99,6 +92,7 @@ const StreakWidget = memo(({ days, name, t }: StreakWidgetProps) => {
           <motion.div 
             initial={false}
             animate={{ width: `${percentage}%` }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="h-full rounded-full bg-yellow-500" 
           />
         </div>
