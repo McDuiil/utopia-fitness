@@ -5,6 +5,7 @@ import { useApp } from "@/src/context/AppContext";
 import { Exercise, WorkoutSession, WorkoutSessionExercise, DayData } from "@/src/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { getTodayStr } from "../lib/utils";
+import AddWorkoutButton from "./workouts/AddWorkoutButton";
 
 const EXERCISES: Exercise[] = [
   { id: '1', name: { en: 'Bench Press', zh: '卧推' }, part: 'chest', equipment: 'Barbell', image: '' },
@@ -45,9 +46,18 @@ export default function Workouts() {
   const [showCaloriePrompt, setShowCaloriePrompt] = useState(false);
   const [isEditingExistingSession, setIsEditingExistingSession] = useState(false);
   const [elapsedTime, setElapsedTime] = useState("00:00");
-  const [showAddOptions, setShowAddOptions] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
   const [planningSession, setPlanningSession] = useState<WorkoutSession | null>(null);
+
+  const handleStartNewWorkout = React.useCallback(() => {
+    setIsPlanning(false);
+    setShowCategoryPicker(true);
+  }, []);
+
+  const handleStartPlanning = React.useCallback(() => {
+    setIsPlanning(true);
+    setShowCategoryPicker(true);
+  }, []);
 
   // Real-time timer for active session
   React.useEffect(() => {
@@ -81,14 +91,14 @@ export default function Workouts() {
 
   // Body scroll lock
   React.useEffect(() => {
-    const isModalOpen = !!editingSession || !!deletingSession || showCategoryPicker || showExercisePicker || showCustomExerciseModal || showAddCategoryModal || showAddOptions || isPlanning;
+    const isModalOpen = !!editingSession || !!deletingSession || showCategoryPicker || showExercisePicker || showCustomExerciseModal || showAddCategoryModal || isPlanning;
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [editingSession, deletingSession, showCategoryPicker, showExercisePicker, showCustomExerciseModal, showAddCategoryModal, showAddOptions, isPlanning]);
+  }, [editingSession, deletingSession, showCategoryPicker, showExercisePicker, showCustomExerciseModal, showAddCategoryModal, isPlanning]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
@@ -477,75 +487,13 @@ export default function Workouts() {
       {/* Header */}
       <div className="flex items-center justify-between px-4">
         <h1 className="text-3xl font-bold tracking-tight">{t("workouts")}</h1>
-        {!activeSession && !planningSession && (
-          <button 
-            onClick={() => setShowAddOptions(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95"
-          >
-            <Plus size={24} />
-          </button>
-        )}
+        <AddWorkoutButton 
+          t={t}
+          onStartNewWorkout={handleStartNewWorkout}
+          onStartPlanning={handleStartPlanning}
+          disabled={!!activeSession || !!planningSession}
+        />
       </div>
-
-      {/* Add Options Menu */}
-      <AnimatePresence>
-        {showAddOptions && (
-          <div 
-            className="fixed inset-0 z-[120] flex items-end justify-center bg-black/40 p-4 backdrop-blur-[2px]"
-            onClick={() => setShowAddOptions(false)}
-          >
-            <motion.div 
-              initial={{ y: "100%", opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: "100%", opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm space-y-3 pb-8"
-            >
-              <GlassCard className="p-2 border-white/10 bg-gray-900/90 shadow-2xl">
-                <button 
-                  onClick={() => {
-                    setIsPlanning(false);
-                    setShowCategoryPicker(true);
-                    setShowAddOptions(false);
-                  }}
-                  className="flex w-full items-center gap-4 rounded-xl p-4 hover:bg-white/5 transition-colors"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-green-400">
-                    <Play size={20} fill="currentColor" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-bold">{t("startNewWorkout")}</p>
-                    <p className="text-xs text-white/40">Record your training in real-time</p>
-                  </div>
-                </button>
-                <div className="h-[1px] bg-white/5 mx-4" />
-                <button 
-                  onClick={() => {
-                    setIsPlanning(true);
-                    setShowCategoryPicker(true);
-                    setShowAddOptions(false);
-                  }}
-                  className="flex w-full items-center gap-4 rounded-xl p-4 hover:bg-white/5 transition-colors"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20 text-blue-400">
-                    <Plus size={20} />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-bold">{t("trainingPlan")}</p>
-                    <p className="text-xs text-white/40">Plan your workout for today</p>
-                  </div>
-                </button>
-              </GlassCard>
-              <button 
-                onClick={() => setShowAddOptions(false)}
-                className="w-full rounded-2xl bg-white/10 py-4 font-bold text-white backdrop-blur-xl"
-              >
-                {t("cancel")}
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Tab Switcher */}
       {!activeSession && !planningSession && (
