@@ -1,11 +1,20 @@
 import React, { useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAppSelector } from '../hooks/useAppSelector';
 import { Download, Upload, Smartphone, Monitor, CheckCircle2, AlertCircle, Github, Cloud, RefreshCw, LogIn, LogOut, User as UserIcon, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { githubService } from '../services/githubService';
 
 export const SyncSettings: React.FC = () => {
-  const { t, appData, setAppData, mergeData, syncWithGist, showToast, user, signIn, logout, pushAllToCloud, isAuthReady } = useApp();
+  const { t, setAppData, mergeData, syncWithGist, showToast, user, signIn, logout, pushAllToCloud } = useApp();
+  const syncSettings = useAppSelector(s => s.appData.syncSettings);
+  const profile = useAppSelector(s => s.appData.profile);
+  const days = useAppSelector(s => s.appData.days);
+  const dietPlans = useAppSelector(s => s.appData.dietPlans);
+  const customExercises = useAppSelector(s => s.appData.customExercises);
+  const customCategories = useAppSelector(s => s.appData.customCategories);
+  const nutritionSettings = useAppSelector(s => s.appData.nutritionSettings);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -13,7 +22,17 @@ export const SyncSettings: React.FC = () => {
   const [showLegacy, setShowLegacy] = useState(false);
 
   const handleExport = () => {
-    const dataStr = JSON.stringify(appData, null, 2);
+    // Construct export data from slices
+    const exportData = {
+      profile,
+      days,
+      dietPlans,
+      customExercises,
+      customCategories,
+      nutritionSettings,
+      syncSettings
+    };
+    const dataStr = JSON.stringify(exportData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const exportFileDefaultName = `utopia_sync_${new Date().toISOString().split('T')[0]}.json`;
 
@@ -46,7 +65,7 @@ export const SyncSettings: React.FC = () => {
   };
 
   const handleGistSync = async () => {
-    if (!appData.syncSettings.githubToken || !appData.syncSettings.gistId) {
+    if (!syncSettings.githubToken || !syncSettings.gistId) {
       setSyncStatus('error');
       showToast(t('enterTokenAndGistId'), 'error');
       setTimeout(() => {
@@ -68,7 +87,7 @@ export const SyncSettings: React.FC = () => {
   };
 
   const handleForcePull = async () => {
-    if (!appData.syncSettings.githubToken || !appData.syncSettings.gistId) {
+    if (!syncSettings.githubToken || !syncSettings.gistId) {
       showToast(t('enterTokenAndGistId'), 'error');
       return;
     }
@@ -80,7 +99,7 @@ export const SyncSettings: React.FC = () => {
     setShowForcePullConfirm(false);
     setIsSyncing(true);
     try {
-      const remoteData = await githubService.fetchGist(appData.syncSettings.githubToken, appData.syncSettings.gistId);
+      const remoteData = await githubService.fetchGist(syncSettings.githubToken!, syncSettings.gistId!);
       if (remoteData) {
         mergeData(remoteData);
         setSyncStatus('success');
@@ -187,29 +206,29 @@ export const SyncSettings: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-4">
           <button
-            onClick={() => setAppData({ ...appData, syncSettings: { ...appData.syncSettings, mode: 'pc' } })}
+            onClick={() => setAppData(prev => ({ ...prev, syncSettings: { ...prev.syncSettings, mode: 'pc' } }))}
             className={`flex flex-col items-center gap-3 p-4 rounded-xl border transition-all ${
-              appData.syncSettings.mode === 'pc'
+              syncSettings.mode === 'pc'
                 ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
                 : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
             }`}
           >
             <Monitor className="w-6 h-6" />
             <span className="text-sm font-medium">{t('pcMode')}</span>
-            {appData.syncSettings.mode === 'pc' && <CheckCircle2 className="w-4 h-4" />}
+            {syncSettings.mode === 'pc' && <CheckCircle2 className="w-4 h-4" />}
           </button>
 
           <button
-            onClick={() => setAppData({ ...appData, syncSettings: { ...appData.syncSettings, mode: 'mobile' } })}
+            onClick={() => setAppData(prev => ({ ...prev, syncSettings: { ...prev.syncSettings, mode: 'mobile' } }))}
             className={`flex flex-col items-center gap-3 p-4 rounded-xl border transition-all ${
-              appData.syncSettings.mode === 'mobile'
+              syncSettings.mode === 'mobile'
                 ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
                 : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
             }`}
           >
             <Smartphone className="w-6 h-6" />
             <span className="text-sm font-medium">{t('mobileMode')}</span>
-            {appData.syncSettings.mode === 'mobile' && <CheckCircle2 className="w-4 h-4" />}
+            {syncSettings.mode === 'mobile' && <CheckCircle2 className="w-4 h-4" />}
           </button>
         </div>
       </div>
@@ -250,11 +269,11 @@ export const SyncSettings: React.FC = () => {
                     type="password"
                     placeholder={t('enterToken')}
                     className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none border border-white/10 focus:border-purple-500/50 transition-all"
-                    value={appData.syncSettings.githubToken || ''}
-                    onChange={(e) => setAppData({
-                      ...appData,
-                      syncSettings: { ...appData.syncSettings, githubToken: e.target.value }
-                    })}
+                    value={syncSettings.githubToken || ''}
+                    onChange={(e) => setAppData(prev => ({
+                      ...prev,
+                      syncSettings: { ...prev.syncSettings, githubToken: e.target.value }
+                    }))}
                   />
                 </div>
                 <div className="space-y-1">
@@ -263,11 +282,11 @@ export const SyncSettings: React.FC = () => {
                     type="text"
                     placeholder={t('enterGistId')}
                     className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none border border-white/10 focus:border-purple-500/50 transition-all"
-                    value={appData.syncSettings.gistId || ''}
-                    onChange={(e) => setAppData({
-                      ...appData,
-                      syncSettings: { ...appData.syncSettings, gistId: e.target.value }
-                    })}
+                    value={syncSettings.gistId || ''}
+                    onChange={(e) => setAppData(prev => ({
+                      ...prev,
+                      syncSettings: { ...prev.syncSettings, gistId: e.target.value }
+                    }))}
                   />
                 </div>
               </div>
@@ -342,10 +361,10 @@ export const SyncSettings: React.FC = () => {
         className="hidden"
       />
 
-      {appData.syncSettings.lastSync && (
+      {syncSettings.lastSync && (
         <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
           <AlertCircle className="w-3 h-3" />
-          <span>{t('lastSync')}: {new Date(appData.syncSettings.lastSync).toLocaleString()}</span>
+          <span>{t('lastSync')}: {new Date(syncSettings.lastSync).toLocaleString()}</span>
         </div>
       )}
 
