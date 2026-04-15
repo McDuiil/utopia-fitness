@@ -1,19 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Language, Theme, AppData, Profile, DayData, CustomMeal, WorkoutSession, ResolvedNutritionToday, NutritionSettings, MacroGrams, DayTypeConfig } from '../types';
+import { Language, Theme, AppData, Profile, DayData, CustomMeal, WorkoutSession, ResolvedNutritionToday, NutritionSettings, MacroGrams, DayTypeConfig, Tab } from '../types';
 import { translations } from '../lib/i18n';
 import { githubService } from '../services/githubService';
 import { getTodayStr, calcCalories } from '../lib/utils';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { auth, db, signInWithGoogle, logout as firebaseLogout, onAuthStateChanged, User, doc, setDoc, onSnapshot, collection, OperationType, handleFirestoreError } from '../firebase';
 
-interface AppContextType {
+export interface AppContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
   theme: Theme;
   setTheme: (theme: Theme) => void;
   t: (key: keyof typeof translations.en) => string;
   appData: AppData;
-  setAppData: (data: AppData) => void;
+  setAppData: (data: AppData | ((prev: AppData) => AppData)) => void;
   calculateBMR: (profile: Profile) => number;
   mergeData: (incomingData: any) => void;
   syncWithGist: (silent?: boolean) => Promise<void>;
@@ -26,8 +26,8 @@ interface AppContextType {
   isAuthReady: boolean;
   selectedDate: string;
   setSelectedDate: (date: string) => void;
-  activeTab: string;
-  setActiveTab: (tab: any) => void;
+  activeTab: Tab;
+  setActiveTab: (tab: Tab) => void;
   resolvedNutritionToday: ResolvedNutritionToday;
   sessionDayType: 'training' | 'rest' | null;
   setSessionDayType: (type: 'training' | 'rest' | null) => void;
@@ -90,7 +90,7 @@ const initialData: AppData = {
   activeWorkoutSession: null
 };
 
-const AppContext = createContext<AppContextType | undefined>(undefined);
+export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const migrateData = (data: any): AppData => {
   const parsed = { ...data };
@@ -219,6 +219,31 @@ const migrateData = (data: any): AppData => {
   return parsed as AppData;
 };
 
+const validateAppData = (data: any): AppData => {
+  if (!data || typeof data !== 'object') {
+    throw new Error("AppData 必须是一个对象");
+  }
+
+  // 基础结构校验
+  const requiredKeys = ['profile', 'days', 'nutritionSettings'];
+  for (const key of requiredKeys) {
+    if (!(key in data)) {
+      console.warn(`[DataGuard] 缺失关键字段: ${key}, 正在尝试修复...`);
+      if (key === 'profile') data.profile = { ...defaultProfile };
+      if (key === 'days') data.days = {};
+      if (key === 'nutritionSettings') data.nutritionSettings = { ...initialData.nutritionSettings };
+    }
+  }
+
+  // 深度校验：days 必须是对象
+  if (data.days && (typeof data.days !== 'object' || Array.isArray(data.days))) {
+    console.error("[DataGuard] days 格式错误，重置为空对象");
+    data.days = {};
+  }
+
+  return data as AppData;
+};
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -232,12 +257,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setSessionDayType(null);
   }, [selectedDate]);
-  const [appData, setAppData] = useState<AppData>(() => {
+  const [appData, setAppDataInternal] = useState<AppData>(() => {
     const saved = localStorage.getItem('utopia_data');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return migrateData(parsed);
+        const migrated = migrateData(parsed);
+        return validateAppData(migrated);
       } catch (e) {
         console.error("Failed to parse or migrate data:", e);
         return initialData;
@@ -246,7 +272,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return initialData;
   });
 
-  const [activeTab, setActiveTab] = useState<string>(() => {
+  const setAppData = (newData: AppData | ((prev: AppData) => AppData)) => {
+    try {
+      if (typeof newData === 'function') {
+        setAppDataInternal(prev => {
+          const next = newData(prev);
+          return validateAppData(next);
+        });
+      } else {
+        setAppDataInternal(validateAppData(newData));
+      }
+    } catch (error) {
+      console.error("[DataGuard] 拦截到非法数据更新:", error);
+      // If validation fails, we don't update the state to prevent crash
+      if (window.__reportError) window.__reportError(error);
+    }
+  };
+
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
     // If there's an active session in the appData we just loaded, start on workouts tab
     return appData?.activeWorkoutSession ? 'workouts' : 'dashboard';
   });
@@ -257,7 +300,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const resolvedNutritionToday = React.useMemo((): ResolvedNutritionToday => {
     const settings = appData.nutritionSettings;
     const today = getTodayStr();
-    const dayData = appData.days[selectedDate] || { meals: [], workoutSessions: [] };
+    const dayData = appData.days[selectedDate] || { meals: [], workoutSessions: [], manualCarbDay: undefined };
     
     // 1. Determine Day Type
     let currentDayType: 'training' | 'rest' = 'rest';
@@ -557,17 +600,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     document.body.className = theme;
   }, [theme]);
 
-  const calculateBMR = (profile: Profile) => {
+  const calculateBMR = React.useCallback((profile: Profile) => {
     if (profile.useCustomBMR) return profile.customBMR;
     // Mifflin-St Jeor Equation
     const { gender, age, height, weight } = profile;
     const base = (10 * weight) + (6.25 * height) - (5 * age);
     return gender === 'male' ? base + 5 : base - 161;
-  };
+  }, []);
 
-  const t = (key: keyof typeof translations.en) => {
+  const t = React.useCallback((key: keyof typeof translations.en) => {
     return translations[language][key] || key;
-  };
+  }, [language]);
 
   const mergeData = (incomingData: any) => {
     console.log("Merging incoming data. Incoming version:", incomingData.version || 1);
@@ -833,13 +876,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const contextValue = React.useMemo(() => ({ 
+    language, setLanguage, theme, setTheme, t, appData, setAppData, calculateBMR, mergeData, syncWithGist, showToast,
+    signIn, logout, pushAllToCloud, saveAppDataToCloud, user, isAuthReady,
+    selectedDate, setSelectedDate, activeTab, setActiveTab,
+    resolvedNutritionToday, sessionDayType, setSessionDayType
+  }), [
+    language, theme, t, appData, calculateBMR, mergeData, syncWithGist, showToast,
+    signIn, logout, pushAllToCloud, saveAppDataToCloud, user, isAuthReady,
+    selectedDate, activeTab, resolvedNutritionToday, sessionDayType
+  ]);
+
   return (
-    <AppContext.Provider value={{ 
-      language, setLanguage, theme, setTheme, t, appData, setAppData, calculateBMR, mergeData, syncWithGist, showToast,
-      signIn, logout, pushAllToCloud, saveAppDataToCloud, user, isAuthReady,
-      selectedDate, setSelectedDate, activeTab, setActiveTab,
-      resolvedNutritionToday, sessionDayType, setSessionDayType
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
       {toast && (
         <div className="fixed bottom-24 left-1/2 z-[200] -translate-x-1/2 px-4 w-full max-w-xs pointer-events-none">
