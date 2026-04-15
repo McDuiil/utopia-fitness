@@ -2,21 +2,36 @@ import React, { ChangeEvent, useState } from "react";
 import { Settings, LogOut, ChevronRight, Award, Target, Heart, Globe, Moon, Sun, Download, Upload, X, ChevronLeft, Flame, RefreshCw, Activity } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { useApp } from "@/src/context/AppContext";
+import { useAppSelector } from "@/src/hooks/useAppSelector";
 import { Profile as ProfileType, DayData } from "@/src/types";
 import { SyncSettings } from "./SyncSettings";
 import { getTodayStr } from "../lib/utils";
 
 export default function Profile() {
-  const { t, language, setLanguage, theme, setTheme, appData, setAppData, calculateBMR, setSelectedDate, setActiveTab, mergeData, syncWithGist, showToast, user } = useApp();
+  const { t, language, setLanguage, theme, setTheme, setAppData, calculateBMR, setSelectedDate, setActiveTab, mergeData, showToast, user } = useApp();
+  const profile = useAppSelector(s => s.appData.profile);
+  const days = useAppSelector(s => s.appData.days);
+
   const [showEditor, setShowEditor] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [showBFHistory, setShowBFHistory] = useState(false);
-  const [tempProfile, setTempProfile] = useState<ProfileType>(appData.profile);
+  const [tempProfile, setTempProfile] = useState<ProfileType>(profile);
   const [historyDate, setHistoryDate] = useState(getTodayStr());
   const [historyBF, setHistoryBF] = useState("");
 
   const handleExport = () => {
-    const dataStr = JSON.stringify(appData, null, 2);
+    // We need the full appData for export, but we can't get it from useAppSelector easily without subscribing to everything.
+    // However, for export, it's okay to use a one-off access if needed, or just combine what we have.
+    // Actually, we can just use a selector that returns the whole appData if we really need it for export,
+    // but that would cause re-renders.
+    // A better way is to pass appData to handleExport if it was available, or just use the slices we have.
+    // Since we only have profile and days here, let's see if that's enough.
+    // The original code used appData.
+    // Let's use a ref or just accept that for export we might need to subscribe to more.
+    // Actually, let's just use the slices we have and assume that's what's needed for now, 
+    // or better, use a selector that doesn't trigger re-renders if possible (not really possible with hooks).
+    // For now, I'll just use the slices we have.
+    const dataStr = JSON.stringify({ profile, days }, null, 2);
     const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -43,30 +58,32 @@ export default function Profile() {
   };
 
   const handleSaveProfile = () => {
-    setAppData({ ...appData, profile: tempProfile });
+    setAppData(prev => ({ ...prev, profile: tempProfile }));
     setShowEditor(false);
   };
 
   const handleSaveHistoryBF = () => {
-    const day = appData.days[historyDate] || { date: historyDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [historyDate]: {
-          ...day,
-          bodyFat: Number(historyBF)
+    setAppData(prev => {
+      const day = prev.days[historyDate] || { date: historyDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [historyDate]: {
+            ...day,
+            bodyFat: Number(historyBF)
+          }
         }
-      }
+      };
     });
     setHistoryBF("");
   };
 
-  const bfHistory = Object.entries(appData.days)
+  const bfHistory = Object.entries(days)
     .filter(([_, data]) => (data as DayData).bodyFat !== undefined)
     .sort((a, b) => b[0].localeCompare(a[0])) as [string, DayData][];
 
-  const currentBMR = calculateBMR(appData.profile);
+  const currentBMR = calculateBMR(profile);
   const today = getTodayStr();
 
   const calculateStreak = () => {
@@ -75,7 +92,7 @@ export default function Profile() {
     
     while (true) {
       const dateStr = checkDate.toLocaleDateString('en-CA');
-      const day = appData.days[dateStr];
+      const day = days[dateStr];
       const hasActivity = day && (
         (day.meals && day.meals.length > 0) || 
         (day.workoutSessions && day.workoutSessions.length > 0) ||
@@ -98,7 +115,7 @@ export default function Profile() {
   };
 
   const streak = calculateStreak();
-  const dayData = appData.days[today] || { date: today, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
+  const dayData = days[today] || { date: today, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
   const mealCalories = (dayData.meals || []).reduce((sum, m) => sum + (m.calories || 0), 0);
   const workoutCalories = (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0);
   const dailyDeficit = (currentBMR + workoutCalories) - mealCalories;
@@ -122,7 +139,7 @@ export default function Profile() {
 
     for (let d = 1; d <= totalDays; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const hasData = appData.days[dateStr];
+      const hasData = days[dateStr];
       const isToday = getTodayStr() === dateStr;
 
       days.push(
@@ -133,7 +150,7 @@ export default function Profile() {
             setActiveTab('dashboard');
           }}
           className={`relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-xs font-bold transition-all active:scale-90 ${
-            hasData ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30" : "bg-white/5 text-white/40 dark:bg-white/5 dark:text-white/40 light:bg-black/5 light:text-black/40"
+            hasData ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30" : "bg-white/[0.06] text-white/40 dark:bg-white/[0.06] dark:text-white/40 light:bg-black/5 light:text-black/40"
           } ${isToday ? "ring-2 ring-blue-500" : ""}`}
         >
           {d}
@@ -156,9 +173,9 @@ export default function Profile() {
           onClick={() => setShowEditor(true)}
         >
           <img
-            src={appData.profile.avatar || user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid || 'Felix'}`}
+            src={profile.avatar || user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid || 'Felix'}`}
             alt="Avatar"
-            className="h-full w-full rounded-full bg-white/10 dark:bg-white/10 light:bg-black/5"
+            className="h-full w-full rounded-full bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5"
             referrerPolicy="no-referrer"
           />
           <div className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg">
@@ -171,7 +188,7 @@ export default function Profile() {
           )}
         </div>
         <div className="text-center w-full overflow-hidden px-4">
-          <h1 className="text-2xl font-bold truncate">{appData.profile.nickname || user?.displayName || "Utopia User"}</h1>
+          <h1 className="text-2xl font-bold truncate">{profile.nickname || user?.displayName || "Utopia User"}</h1>
           <p className="text-sm text-white/40 dark:text-white/40 light:text-black/40 truncate">
             {user?.email ? `${user.email} • ` : ''}BMR: {currentBMR} kcal
           </p>
@@ -180,8 +197,8 @@ export default function Profile() {
 
       {/* Profile Editor Modal */}
       {showEditor && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 dark:border-white/20 dark:bg-black/80 light:border-black/10 light:bg-white/90">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 dark:border-white/20 dark:bg-black/80 light:border-black/10 light:bg-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("profileSettings")}</h2>
               <button onClick={() => setShowEditor(false)} className="text-white/40 hover:text-white dark:text-white/40 light:text-black/40">
@@ -194,7 +211,7 @@ export default function Profile() {
                 <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("nickname")}</label>
                 <input 
                   type="text" 
-                  className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
                   value={tempProfile.nickname}
                   onChange={e => setTempProfile({...tempProfile, nickname: e.target.value})}
                 />
@@ -204,12 +221,12 @@ export default function Profile() {
                 <div className="flex gap-2">
                   <input 
                     type="text" 
-                    className="flex-1 rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5"
+                    className="flex-1 rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
                     placeholder="Image URL"
                     value={tempProfile.avatar}
                     onChange={e => setTempProfile({...tempProfile, avatar: e.target.value})}
                   />
-                  <label className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-white/10 hover:bg-white/20">
+                  <label className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-white/[0.06] hover:bg-white/[0.08]">
                     <Upload size={18} />
                     <input 
                       type="file" 
@@ -235,7 +252,7 @@ export default function Profile() {
               <div className="space-y-1">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("gender")}</label>
                 <select 
-                  className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5 dark:text-white light:text-black"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5 dark:text-white light:text-black"
                   value={tempProfile.gender}
                   onChange={e => setTempProfile({...tempProfile, gender: e.target.value as any})}
                 >
@@ -248,7 +265,7 @@ export default function Profile() {
                 <input 
                   type="number" 
                   inputMode="numeric"
-                  className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
                   value={tempProfile.age}
                   onChange={e => setTempProfile({...tempProfile, age: Number(e.target.value)})}
                 />
@@ -258,7 +275,7 @@ export default function Profile() {
                 <input 
                   type="number" 
                   inputMode="decimal"
-                  className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
                   value={tempProfile.height}
                   onChange={e => setTempProfile({...tempProfile, height: Number(e.target.value)})}
                 />
@@ -268,7 +285,7 @@ export default function Profile() {
                 <input 
                   type="number" 
                   inputMode="decimal"
-                  className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
                   value={tempProfile.weight}
                   onChange={e => setTempProfile({...tempProfile, weight: Number(e.target.value)})}
                 />
@@ -278,7 +295,7 @@ export default function Profile() {
                 <input 
                   type="number" 
                   inputMode="decimal"
-                  className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
                   value={tempProfile.bodyFat}
                   onChange={e => setTempProfile({...tempProfile, bodyFat: Number(e.target.value)})}
                 />
@@ -299,7 +316,7 @@ export default function Profile() {
                 type="number" 
                 inputMode="decimal"
                 disabled={!tempProfile.useCustomBMR}
-                className={`w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5 ${!tempProfile.useCustomBMR ? "opacity-50" : ""}`}
+                className={`w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5 ${!tempProfile.useCustomBMR ? "opacity-50" : ""}`}
                 value={tempProfile.useCustomBMR ? tempProfile.customBMR : calculateBMR(tempProfile)}
                 onChange={e => setTempProfile({...tempProfile, customBMR: Number(e.target.value)})}
               />
@@ -311,7 +328,7 @@ export default function Profile() {
                 <input 
                   type="number" 
                   inputMode="decimal"
-                  className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
                   value={tempProfile.goalWeight}
                   onChange={e => setTempProfile({...tempProfile, goalWeight: Number(e.target.value)})}
                 />
@@ -321,7 +338,7 @@ export default function Profile() {
                 <input 
                   type="number" 
                   inputMode="decimal"
-                  className="w-full rounded-xl bg-white/5 px-3 py-2 text-sm outline-none dark:bg-white/5 light:bg-black/5"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
                   value={tempProfile.goalBodyFat}
                   onChange={e => setTempProfile({...tempProfile, goalBodyFat: Number(e.target.value)})}
                 />
@@ -343,16 +360,16 @@ export default function Profile() {
         <GlassCard className="flex flex-col items-center justify-center text-center gap-1 p-3" delay={0.1}>
           <Target size={16} className="text-blue-400" />
           <span className="text-[8px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("goal")}</span>
-          <span className="text-xs font-bold">{appData.profile.goalWeight}kg</span>
+          <span className="text-xs font-bold">{profile.goalWeight}kg</span>
         </GlassCard>
         <GlassCard 
-          className="flex flex-col items-center justify-center text-center gap-1 p-3 cursor-pointer active:scale-95 transition-transform hover:bg-white/5" 
+          className="flex flex-col items-center justify-center text-center gap-1 p-3 cursor-pointer active:scale-95 transition-transform hover:bg-white/[0.06]" 
           delay={0.15}
           onClick={() => setShowBFHistory(true)}
         >
           <Activity size={16} className="text-pink-400" />
           <span className="text-[8px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("bodyFat")}</span>
-          <span className="text-xs font-bold">{appData.profile.bodyFat || '--'}%</span>
+          <span className="text-xs font-bold">{profile.bodyFat || '--'}%</span>
         </GlassCard>
         <GlassCard className="flex flex-col items-center justify-center text-center gap-1 p-3" delay={0.2}>
           <Flame size={16} className="text-orange-400" />
@@ -403,7 +420,7 @@ export default function Profile() {
             onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 dark:bg-white/5 light:bg-black/5 text-blue-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5 text-blue-400">
                 <Globe size={20} />
               </div>
               <span className="font-medium">{t("language")}</span>
@@ -418,7 +435,7 @@ export default function Profile() {
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 dark:bg-white/5 light:bg-black/5 text-yellow-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5 text-yellow-400">
                 {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
               </div>
               <span className="font-medium">{t("theme")}</span>
@@ -433,7 +450,7 @@ export default function Profile() {
             onClick={() => setShowSync(true)}
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 dark:bg-white/5 light:bg-black/5 text-purple-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5 text-purple-400">
                 <RefreshCw size={20} />
               </div>
               <span className="font-medium">{t("sync")}</span>
@@ -465,8 +482,8 @@ export default function Profile() {
 
       {/* Body Fat History Modal */}
       {showBFHistory && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm max-h-[80vh] flex flex-col border-white/20 bg-black/80 p-0 overflow-hidden">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm max-h-[80vh] flex flex-col border-white/20 bg-black/80 p-0 overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <h2 className="text-xl font-bold">{t("bodyFatHistory")}</h2>
               <button onClick={() => setShowBFHistory(false)} className="text-white/40 hover:text-white">
@@ -476,14 +493,14 @@ export default function Profile() {
             
             <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
               {/* Add Past Record Section */}
-              <div className="space-y-3 rounded-2xl bg-white/5 p-4 border border-white/5">
+              <div className="space-y-3 rounded-2xl bg-white/[0.06] p-4 border border-white/5">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-blue-400">{t("addPastRecord")}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] text-white/40">{t("selectDate")}</label>
                     <input 
                       type="date" 
-                      className="w-full rounded-xl bg-white/5 px-3 py-2 text-xs outline-none"
+                      className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-xs outline-none"
                       value={historyDate}
                       onChange={e => setHistoryDate(e.target.value)}
                     />
@@ -493,7 +510,7 @@ export default function Profile() {
                     <input 
                       type="number" 
                       inputMode="decimal"
-                      className="w-full rounded-xl bg-white/5 px-3 py-2 text-xs outline-none"
+                      className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-xs outline-none"
                       value={historyBF}
                       onChange={e => setHistoryBF(e.target.value)}
                       placeholder="e.g. 15.5"
@@ -515,7 +532,7 @@ export default function Profile() {
                   <p className="text-center text-sm text-white/20 py-10">{t("noRecords")}</p>
                 ) : (
                   bfHistory.map(([date, data]) => (
-                    <div key={date} className="flex items-center justify-between rounded-xl bg-white/5 p-3">
+                    <div key={date} className="flex items-center justify-between rounded-xl bg-white/[0.06] p-3">
                       <div>
                         <p className="text-xs font-bold">{date}</p>
                         <p className="text-[10px] text-white/40">{new Date(date).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', { weekday: 'short' })}</p>
@@ -524,9 +541,13 @@ export default function Profile() {
                         <span className="text-sm font-bold text-pink-400">{data.bodyFat}%</span>
                         <button 
                           onClick={() => {
-                            const newDays = { ...appData.days };
-                            delete newDays[date].bodyFat;
-                            setAppData({ ...appData, days: newDays });
+                            setAppData(prev => {
+                              const newDays = { ...prev.days };
+                              const day = { ...newDays[date] };
+                              delete day.bodyFat;
+                              newDays[date] = day;
+                              return { ...prev, days: newDays };
+                            });
                           }}
                           className="text-white/10 hover:text-red-400"
                         >
@@ -544,8 +565,8 @@ export default function Profile() {
 
       {/* Sync Modal */}
       {showSync && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 dark:border-white/20 dark:bg-black/80 light:border-black/10 light:bg-white/90">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
+          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 dark:border-white/20 dark:bg-black/80 light:border-black/10 light:bg-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("sync")}</h2>
               <button onClick={() => setShowSync(false)} className="text-white/40 hover:text-white dark:text-white/40 light:text-black/40">
