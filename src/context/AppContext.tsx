@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Language, Theme, AppData, Profile, DayData, CustomMeal, WorkoutSession, ResolvedNutritionToday, NutritionSettings, MacroGrams, DayTypeConfig, Tab } from '../types';
 import { translations } from '../lib/i18n';
 import { githubService } from '../services/githubService';
-import { getTodayStr, calcCalories } from '../lib/utils';
+import { getTodayStr, calcCalories, sanitizeForFirestore } from '../lib/utils';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { auth, db, signInWithGoogle, logout as firebaseLogout, onAuthStateChanged, User, doc, setDoc, onSnapshot, collection, OperationType, handleFirestoreError } from '../firebase';
 
@@ -561,27 +561,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const saveToFirestore = async () => {
       try {
-        const { mode } = appData.syncSettings;
-
         // 1. Save Profile/Settings
         const userDocRef = doc(db, 'users', user.uid);
         const { days, ...profileData } = appData;
         
         // Always save profile and settings to cloud so they sync across devices
-        // The 'mode' only controls whether this device is the "Master" for global settings
-        // But we still want to push changes made on this device.
-        await setDoc(userDocRef, {
+        await setDoc(userDocRef, sanitizeForFirestore({
           ...profileData,
           updatedAt: new Date().toISOString()
-        }, { merge: true });
+        }), { merge: true });
 
         // 2. Save Days
         if (appData.days[selectedDate]) {
           const dayDocRef = doc(db, 'users', user.uid, 'days', selectedDate);
-          await setDoc(dayDocRef, {
+          await setDoc(dayDocRef, sanitizeForFirestore({
             ...appData.days[selectedDate],
             updatedAt: new Date().toISOString()
-          }, { merge: true });
+          }), { merge: true });
         }
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
@@ -822,18 +818,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveAppDataToCloud = async (data: AppData) => {
     if (!user) return;
     
-    // Helper to recursively replace undefined with null for Firestore compatibility
-    const cleanForFirestore = (obj: any): any => {
-      if (obj === undefined) return null;
-      if (obj === null || typeof obj !== 'object') return obj;
-      if (Array.isArray(obj)) return obj.map(cleanForFirestore);
-      return Object.fromEntries(
-        Object.entries(obj).map(([k, v]) => [k, cleanForFirestore(v)])
-      );
-    };
-
     try {
-      const cleanData = cleanForFirestore(data);
+      const cleanData = sanitizeForFirestore(data);
       const { days, ...profileData } = cleanData;
       
       // Push profile & settings
