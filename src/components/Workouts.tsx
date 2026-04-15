@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Search, Play, Plus, Clock, X, Check, Award, Settings, ChevronRight, LayoutDashboard, History as HistoryIcon, Dumbbell, Flame } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { useApp } from "@/src/context/AppContext";
+import { useAppSelector } from "@/src/hooks/useAppSelector";
 import { Exercise, WorkoutSession, WorkoutSessionExercise, DayData } from "@/src/types";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import { getTodayStr } from "../lib/utils";
@@ -18,13 +19,18 @@ const EXERCISES: Exercise[] = [
 ];
 
 export default function Workouts() {
-  const { t, language, appData, setAppData, showToast } = useApp();
+  const { t, language, setAppData, showToast } = useApp();
+  const activeSession = useAppSelector(s => s.appData.activeWorkoutSession);
+  const customCategories = useAppSelector(s => s.appData.customCategories);
+  const customExercises = useAppSelector(s => s.appData.customExercises);
+  const days = useAppSelector(s => s.appData.days);
+
   const [activeTab, setActiveTab] = useState<'records' | 'library'>('records');
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("all");
-  const activeSession = appData.activeWorkoutSession;
+  
   const setActiveSession = (session: WorkoutSession | null) => {
-    setAppData({ ...appData, activeWorkoutSession: session });
+    setAppData(prev => ({ ...prev, activeWorkoutSession: session }));
   };
   const [showExercisePicker, setShowExercisePicker] = useState(false);
 
@@ -115,25 +121,25 @@ export default function Workouts() {
   const handleAddCategory = () => {
     if (!newCategoryName.trim()) return;
     const newCat = newCategoryName.trim().toLowerCase();
-    setAppData({
-      ...appData,
-      customCategories: [...(appData.customCategories || []), newCat]
-    });
+    setAppData(prev => ({
+      ...prev,
+      customCategories: [...(prev.customCategories || []), newCat]
+    }));
     setNewCategoryName("");
     setShowAddCategoryModal(false);
   };
 
   const deleteCategory = (cat: string) => {
-    setAppData({
-      ...appData,
-      customCategories: (appData.customCategories || []).filter(c => c !== cat)
-    });
+    setAppData(prev => ({
+      ...prev,
+      customCategories: (prev.customCategories || []).filter(c => c !== cat)
+    }));
   };
 
   const defaultCategories = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core', 'cardio'];
-  const allCategories = Array.from(new Set([...defaultCategories, ...(appData.customCategories || [])]));
+  const allCategories = Array.from(new Set([...defaultCategories, ...(customCategories || [])]));
 
-  const allExercises = [...EXERCISES, ...(appData.customExercises || [])];
+  const allExercises = [...EXERCISES, ...(customExercises || [])];
 
   const filteredExercises = allExercises.filter(ex => {
     const matchesSearch = ex.name[language].toLowerCase().includes(search.toLowerCase()) || ex.name.en.toLowerCase().includes(search.toLowerCase());
@@ -144,7 +150,7 @@ export default function Workouts() {
   // Get all workout history across all days
   const workoutHistory = useMemo(() => {
     const history: { date: string; session: WorkoutSession }[] = [];
-    Object.entries(appData.days).forEach(([date, day]) => {
+    Object.entries(days).forEach(([date, day]) => {
       const dayData = day as DayData;
       if (dayData.workoutSessions) {
         dayData.workoutSessions.forEach(session => {
@@ -166,7 +172,7 @@ export default function Workouts() {
       const timeB = b.session.startTime ? new Date(b.session.startTime).getTime() : 0;
       return timeB - timeA;
     });
-  }, [appData.days]);
+  }, [days]);
 
   const startSession = (category?: string) => {
     const newSession: WorkoutSession = {
@@ -240,8 +246,6 @@ export default function Workouts() {
       image: newExercise.image || 'https://images.unsplash.com/photo-1581009146145-b5ef03a7403f?w=400&auto=format&fit=crop&q=60'
     };
 
-    const newCustomExercises = [...(appData.customExercises || []), exercise];
-    
     if (isAddingFromPicker && activeSession) {
       const sessionEx: WorkoutSessionExercise = {
         exerciseId: exercise.id,
@@ -254,17 +258,17 @@ export default function Workouts() {
         exercises: [...activeSession.exercises, sessionEx]
       };
 
-      setAppData({
-        ...appData,
-        customExercises: newCustomExercises,
+      setAppData(prev => ({
+        ...prev,
+        customExercises: [...(prev.customExercises || []), exercise],
         activeWorkoutSession: updatedSession
-      });
+      }));
       setShowExercisePicker(false);
     } else {
-      setAppData({
-        ...appData,
-        customExercises: newCustomExercises
-      });
+      setAppData(prev => ({
+        ...prev,
+        customExercises: [...(prev.customExercises || []), exercise]
+      }));
     }
     
     setShowCustomExerciseModal(false);
@@ -315,20 +319,22 @@ export default function Workouts() {
   const confirmDeleteWorkout = () => {
     if (!deletingSession) return;
     const { date, sessionId } = deletingSession;
-    const day = appData.days[date];
-    if (!day) return;
     
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [date]: {
-          ...day,
-          workoutSessions: day.workoutSessions.map(s => 
-            s.id === sessionId ? { ...s, deleted: true, updatedAt: Date.now() } : s
-          )
+    setAppData(prev => {
+      const day = prev.days[date];
+      if (!day) return prev;
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [date]: {
+            ...day,
+            workoutSessions: day.workoutSessions.map(s => 
+              s.id === sessionId ? { ...s, deleted: true, updatedAt: Date.now() } : s
+            )
+          }
         }
-      }
+      };
     });
     setDeletingSession(null);
   };
@@ -340,23 +346,25 @@ export default function Workouts() {
   const saveEditedSession = () => {
     if (!editingSession) return;
     const { date, session } = editingSession;
-    const day = appData.days[date];
-    if (!day) return;
 
     const updatedSession = {
       ...session,
       updatedAt: Date.now()
     };
 
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [date]: {
-          ...day,
-          workoutSessions: day.workoutSessions.map(s => s.id === session.id ? updatedSession : s)
+    setAppData(prev => {
+      const day = prev.days[date];
+      if (!day) return prev;
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [date]: {
+            ...day,
+            workoutSessions: day.workoutSessions.map(s => s.id === session.id ? updatedSession : s)
+          }
         }
-      }
+      };
     });
     setEditingSession(null);
   };
@@ -383,17 +391,16 @@ export default function Workouts() {
   };
 
   const handleDeleteCustomExercise = (id: string) => {
-    setAppData({
-      ...appData,
-      customExercises: (appData.customExercises || []).filter(ex => ex.id !== id)
-    });
+    setAppData(prev => ({
+      ...prev,
+      customExercises: (prev.customExercises || []).filter(ex => ex.id !== id)
+    }));
   };
 
   const savePlanningSession = () => {
     if (!planningSession) return;
     
     const today = getTodayStr();
-    const dayData = appData.days[today] || { date: today, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
     
     const finishedSession = {
       ...planningSession,
@@ -401,15 +408,18 @@ export default function Workouts() {
       deleted: false
     };
 
-    setAppData({
-      ...appData,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          workoutSessions: [...(dayData.workoutSessions || []), finishedSession]
+    setAppData(prev => {
+      const dayData = prev.days[today] || { date: today, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      return {
+        ...prev,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            workoutSessions: [...(dayData.workoutSessions || []), finishedSession]
+          }
         }
-      }
+      };
     });
     setPlanningSession(null);
     setIsPlanning(false);
@@ -419,9 +429,6 @@ export default function Workouts() {
   const startPlannedWorkout = (date: string, session: WorkoutSession) => {
     // 1. Remove from planned (mark as deleted or remove from array)
     // Actually, we can just update its status to active and set it as activeSession
-    const day = appData.days[date];
-    if (!day) return;
-
     const updatedSession = {
       ...session,
       status: 'active' as const,
@@ -430,16 +437,20 @@ export default function Workouts() {
     };
 
     // Remove from history list temporarily while it's active
-    setAppData({
-      ...appData,
-      activeWorkoutSession: updatedSession,
-      days: {
-        ...appData.days,
-        [date]: {
-          ...day,
-          workoutSessions: day.workoutSessions.filter(s => s.id !== session.id)
+    setAppData(prev => {
+      const day = prev.days[date];
+      if (!day) return prev;
+      return {
+        ...prev,
+        activeWorkoutSession: updatedSession,
+        days: {
+          ...prev.days,
+          [date]: {
+            ...day,
+            workoutSessions: day.workoutSessions.filter(s => s.id !== session.id)
+          }
         }
-      }
+      };
     });
   };
 
@@ -453,7 +464,6 @@ export default function Workouts() {
     }
 
     const today = getTodayStr();
-    const dayData = appData.days[today] || { date: today, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
     
     const finishedSession = {
       ...activeSession,
@@ -463,16 +473,19 @@ export default function Workouts() {
       status: 'completed' as const
     };
 
-    setAppData({
-      ...appData,
-      activeWorkoutSession: null,
-      days: {
-        ...appData.days,
-        [today]: {
-          ...dayData,
-          workoutSessions: [...(dayData.workoutSessions || []), finishedSession]
+    setAppData(prev => {
+      const dayData = prev.days[today] || { date: today, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
+      return {
+        ...prev,
+        activeWorkoutSession: null,
+        days: {
+          ...prev.days,
+          [today]: {
+            ...dayData,
+            workoutSessions: [...(dayData.workoutSessions || []), finishedSession]
+          }
         }
-      }
+      };
     });
     setShowCaloriePrompt(false);
   };
@@ -853,7 +866,7 @@ export default function Workouts() {
 
               <div className="grid grid-cols-1 gap-3">
                 {filteredExercises.map((ex, index) => {
-                  const isCustom = (appData.customExercises || []).some(ce => ce.id === ex.id);
+                  const isCustom = (customExercises || []).some(ce => ce.id === ex.id);
                   return (
                     <GlassCard key={ex.id} className="p-4" delay={index * 0.03}>
                       <div className="flex items-center justify-between">
@@ -1146,7 +1159,7 @@ export default function Workouts() {
                   >
                     {t(cat as any) || cat.charAt(0).toUpperCase() + cat.slice(1)}
                   </button>
-                  {appData.customCategories?.includes(cat) && (
+                  {(customCategories || []).includes(cat) && (
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
