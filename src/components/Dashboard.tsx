@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { Settings, X, Check, AlertCircle, GripVertical, CheckCircle2, Play, Plus } from "lucide-react";
+import { Settings, X, Check, AlertCircle, GripVertical, CheckCircle2, Play, Plus, Bug, Flame, Award, Footprints, Droplets, Utensils } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { useApp } from "@/src/context/AppContext";
+import { useAppSelector } from "../hooks/useAppSelector";
 import { getTodayStr } from "../lib/utils";
 import {
   DndContext,
@@ -33,6 +34,8 @@ import StreakWidget from "./dashboard/widgets/StreakWidget";
 import BodyFatWidget from "./dashboard/widgets/BodyFatWidget";
 import QuickActionWidget from "./dashboard/widgets/QuickActionWidget";
 import StepsWidget from "./dashboard/widgets/StepsWidget";
+import StabilityTest from "./StabilityTest";
+// ErrorBoundary is already imported or defined locally, removing duplicate import
 
 function SortableWidget({ id, children, isEditing }: { id: string; children: React.ReactNode; isEditing: boolean }) {
   const {
@@ -68,23 +71,50 @@ function SortableWidget({ id, children, isEditing }: { id: string; children: Rea
   );
 }
 
+import ErrorBoundary from "./ErrorBoundary";
+
+function WidgetWrapper({ children, name, id }: { children: React.ReactNode; name: string; id: string }) {
+  return (
+    <ErrorBoundary 
+      name={name} 
+      fallback={
+        <div className="h-full min-h-[100px] flex flex-col items-center justify-center p-4 rounded-2xl bg-white/5 border border-white/10 text-center gap-2">
+          <div className="h-8 w-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-500">
+            <AlertCircle size={16} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-white/60 uppercase tracking-tighter">{name} 异常</p>
+            <p className="text-[8px] text-white/30">请尝试刷新或检查数据</p>
+          </div>
+        </div>
+      }
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
+
 export default function Dashboard() {
-  const { t, appData, language, calculateBMR, setAppData, selectedDate, setSelectedDate, setActiveTab, resolvedNutritionToday } = useApp();
+  console.log("render Dashboard");
+  const t = useAppSelector(s => s.t);
+  const selectedDate = useAppSelector(s => s.selectedDate);
+  const enabledWidgets = useAppSelector(s => s.appData.enabledWidgets || ['quickWorkout', 'quickMeal', 'weight', 'bodyFat', 'calories', 'deficit', 'activity', 'water', 'streak']);
+  const profileName = useAppSelector(s => s.appData.profile.name);
+  const setAppData = useAppSelector(s => s.setAppData);
+  const setActiveTab = useAppSelector(s => s.setActiveTab);
+  const resolvedNutritionToday = useAppSelector(s => s.resolvedNutritionToday);
+  const activeWorkoutSession = useAppSelector(s => s.appData.activeWorkoutSession);
+  const profileAvatar = useAppSelector(s => s.appData.profile?.avatar);
+  
+  const isHistory = useMemo(() => selectedDate !== getTodayStr(), [selectedDate]);
+  
   const [showWidgetManager, setShowWidgetManager] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showTestPanel, setShowTestPanel] = useState(false);
   
-  const today = getTodayStr();
-  const isHistory = selectedDate !== today;
-  const dayData = useMemo(() => appData.days[selectedDate] || { date: selectedDate, steps: 0, water: 0, meals: [], workoutSessions: [] }, [appData.days, selectedDate]);
-  
-  const bmr = useMemo(() => calculateBMR(appData.profile), [calculateBMR, appData.profile]);
-  const workoutCalories = useMemo(() => (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0), [dayData.workoutSessions]);
-  
-  const dailyDeficit = useMemo(() => (bmr + workoutCalories) - resolvedNutritionToday.calories.consumed, [bmr, workoutCalories, resolvedNutritionToday.calories.consumed]);
-
   const getGreeting = () => {
     const hour = new Date().getHours();
-    const name = appData.profile.name || "McDull";
+    const name = profileName || "McDull";
     if (hour < 5) return { title: `Hi, ${name}`, sub: "深夜还在坚持？记得早点休息。" };
     if (hour < 12) return { title: `早上好, ${name}`, sub: "今天也是刷脂的好天气！" };
     if (hour < 18) return { title: `下午好, ${name}`, sub: "保持状态，离目标又近了一步。" };
@@ -102,119 +132,80 @@ export default function Dashboard() {
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      const enabled = appData.enabledWidgets || [];
-      const oldIndex = enabled.indexOf(active.id as string);
-      const newIndex = enabled.indexOf(over.id as string);
-      const newOrder = arrayMove(enabled, oldIndex, newIndex);
-      setAppData({ ...appData, enabledWidgets: newOrder });
+      setAppData(prev => {
+        const enabled = prev.enabledWidgets || [];
+        const oldIndex = enabled.indexOf(active.id as string);
+        const newIndex = enabled.indexOf(over.id as string);
+        const newOrder = arrayMove(enabled, oldIndex, newIndex);
+        return { ...prev, enabledWidgets: newOrder };
+      });
     }
-  }, [appData, setAppData]);
-
-  const handleUpdateWeight = useCallback((weight?: number, bodyFat?: number) => {
-    setAppData(prev => ({
-      ...prev,
-      days: {
-        ...prev.days,
-        [selectedDate]: {
-          ...(prev.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] }),
-          weight,
-          bodyFat
-        }
-      }
-    }));
-  }, [selectedDate, setAppData]);
-
-  const handleAddWater = useCallback((amount: number) => {
-    setAppData(prev => {
-      const day = prev.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
-      return {
-        ...prev,
-        days: { ...prev.days, [selectedDate]: { ...day, water: (day.water || 0) + amount } }
-      };
-    });
-  }, [selectedDate, setAppData]);
-
-  const handleSetWater = useCallback((total: number) => {
-    setAppData(prev => {
-      const day = prev.days[selectedDate] || { date: selectedDate, calories: 0, steps: 0, water: 0, meals: [], workoutSessions: [] };
-      return {
-        ...prev,
-        days: { ...prev.days, [selectedDate]: { ...day, water: total } }
-      };
-    });
-  }, [selectedDate, setAppData]);
+  }, [setAppData]);
 
   const toggleWidget = useCallback((id: string) => {
-    const enabled = appData.enabledWidgets || [];
-    const newEnabled = enabled.includes(id) ? enabled.filter(w => w !== id) : [...enabled, id];
-    setAppData({ ...appData, enabledWidgets: newEnabled });
-  }, [appData, setAppData]);
+    setAppData(prev => {
+      const enabled = prev.enabledWidgets || [];
+      const newEnabled = enabled.includes(id) ? enabled.filter(w => w !== id) : [...enabled, id];
+      return { ...prev, enabledWidgets: newEnabled };
+    });
+  }, [setAppData]);
 
-  const isEnabled = (id: string) => (appData.enabledWidgets || []).includes(id);
-  const enabledWidgets = appData.enabledWidgets || ['quickWorkout', 'quickMeal', 'weight', 'bodyFat', 'calories', 'deficit', 'activity', 'water', 'streak'];
-
-  const getTimeSlot = () => {
-    const hour = new Date().getHours();
-    if (hour < 11) return t("breakfast");
-    if (hour < 15) return t("lunch");
-    if (hour < 19) return t("dinner");
-    return t("snack");
-  };
+  const isEnabled = (id: string) => enabledWidgets.includes(id);
 
   const renderWidget = (id: string) => {
     switch (id) {
       case 'quickWorkout':
-        return (
-          <QuickActionWidget 
-            type="workout"
-            label={t("startWorkout")}
-            subLabelText={t("quickStart")}
-            onClick={() => setActiveTab('workouts')}
-          />
-        );
+        return <QuickActionWidget type="workout" />;
       case 'quickMeal':
-        return (
-          <QuickActionWidget 
-            type="meal"
-            label={t("quickLog")}
-            subLabelText={getTimeSlot()}
-            onClick={() => setActiveTab('nutrition')}
-          />
-        );
+        return <QuickActionWidget type="meal" />;
       case 'weight':
         return (
-          <WeightWidget 
-            selectedDate={selectedDate}
-            dayData={dayData}
-            appData={appData}
-            isHistory={isHistory}
-            t={t}
-            onUpdateWeight={handleUpdateWeight}
-          />
+          <WidgetWrapper id="weight" name={t("weight")}>
+            <WeightWidget />
+          </WidgetWrapper>
         );
       case 'calories':
-        return <CaloriesWidget nutrition={resolvedNutritionToday} t={t} />;
+        return (
+          <WidgetWrapper id="calories" name={t("calories")}>
+            <CaloriesWidget />
+          </WidgetWrapper>
+        );
       case 'deficit':
-        return <DeficitWidget deficit={dailyDeficit} goal={appData.profile.goalDeficit} t={t} />;
+        return (
+          <WidgetWrapper id="deficit" name={t("deficitWidget")}>
+            <DeficitWidget />
+          </WidgetWrapper>
+        );
       case 'streak':
-        return <StreakWidget days={appData.days} name={appData.profile.name} t={t} />;
+        return (
+          <WidgetWrapper id="streak" name={t("streak")}>
+            <StreakWidget />
+          </WidgetWrapper>
+        );
       case 'bodyFat':
         return (
-          <BodyFatWidget 
-            bodyFat={dayData.bodyFat}
-            profileBodyFat={appData.profile.bodyFat}
-            goalBodyFat={appData.profile.goalBodyFat}
-            isHistory={isHistory}
-            t={t}
-            onClick={() => setActiveTab('profile')}
-          />
+          <WidgetWrapper id="bodyFat" name={t("bodyFat")}>
+            <BodyFatWidget />
+          </WidgetWrapper>
         );
       case 'steps':
-        return <StepsWidget steps={dayData.steps || 0} goal={appData.profile.goalSteps || 10000} t={t} />;
+        return (
+          <WidgetWrapper id="steps" name={t("steps")}>
+            <StepsWidget />
+          </WidgetWrapper>
+        );
       case 'activity':
-        return <WeightChartWidget appData={appData} t={t} language={language} />;
+        return (
+          <WidgetWrapper id="activity" name={t("weightTrend")}>
+            <WeightChartWidget />
+          </WidgetWrapper>
+        );
       case 'water':
-        return <WaterWidget dayData={dayData} t={t} onUpdateWater={handleAddWater} onSetWater={handleSetWater} />;
+        return (
+          <WidgetWrapper id="water" name={t("waterWidget")}>
+            <WaterWidget />
+          </WidgetWrapper>
+        );
       default:
         return null;
     }
@@ -232,6 +223,14 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <button 
+            onClick={() => setShowTestPanel(!showTestPanel)}
+            className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-all active:scale-90 ${
+              showTestPanel ? "border-red-500 bg-red-500 text-white" : "border-white/10 bg-white/5 text-white/60"
+            }`}
+          >
+            <Bug size={24} />
+          </button>
+          <button 
             onClick={() => setIsEditing(!isEditing)}
             className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-all active:scale-90 ${
               isEditing ? "border-blue-500 bg-blue-500 text-white" : "border-white/10 bg-white/5 text-white/60"
@@ -241,7 +240,7 @@ export default function Dashboard() {
           </button>
           <div className="h-12 w-12 rounded-full border border-white/20 bg-white/[0.06] p-1">
             <img
-              src={appData.profile?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=Felix`}
+              src={profileAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=Felix`}
               alt="Avatar"
               className="h-full w-full rounded-full"
               referrerPolicy="no-referrer"
@@ -250,8 +249,11 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Stability Test Panel */}
+      {showTestPanel && <StabilityTest />}
+
       {/* Resume Workout Banner */}
-      {appData.activeWorkoutSession && (
+      {activeWorkoutSession && (
         <div className="px-4">
           <GlassCard 
             className="flex items-center justify-between p-4 border-blue-500/30 bg-blue-500/10 cursor-pointer active:scale-95 transition-transform"
@@ -264,7 +266,7 @@ export default function Dashboard() {
               <div>
                 <h3 className="text-sm font-bold text-blue-400">{t("workoutInProgress")}...</h3>
                 <p className="text-[10px] text-white/40">
-                  {appData.activeWorkoutSession.category ? t(appData.activeWorkoutSession.category as any) : t("workouts")} • {new Date(appData.activeWorkoutSession.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {activeWorkoutSession.category ? t(activeWorkoutSession.category as any) : t("workouts")} • {new Date(activeWorkoutSession.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>
