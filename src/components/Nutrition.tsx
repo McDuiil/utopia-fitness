@@ -1327,9 +1327,9 @@ export default function Nutrition() {
                               ings[idx] = { ...ings[idx], n: e.target.value };
                               return { ...prev, ingredients: ings };
                             })}
-                            className="flex-1 bg-transparent text-xs font-bold outline-none"
+                            className="flex-1 min-w-0 bg-transparent text-xs font-bold outline-none"
                           />
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             <input 
                               type="text"
                               inputMode="decimal"
@@ -1340,7 +1340,7 @@ export default function Nutrition() {
                                 ings[idx] = { ...ings[idx], a: e.target.value };
                                 return { ...prev, ingredients: ings };
                               })}
-                              className="w-12 bg-white/5 rounded px-1 py-0.5 text-[10px] text-white/60 text-right outline-none"
+                              className="w-10 bg-white/5 rounded px-1 py-0.5 text-[10px] text-white/60 text-right outline-none"
                             />
                             <span className="text-[8px] text-white/20">g</span>
                           </div>
@@ -1644,9 +1644,9 @@ export default function Nutrition() {
                             ings[idx] = { ...ings[idx], n: e.target.value };
                             return { ...prev, ingredients: ings };
                           })}
-                          className="flex-1 bg-transparent text-xs font-bold outline-none"
+                          className="flex-1 min-w-0 bg-transparent text-xs font-bold outline-none"
                         />
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           <input 
                             type="text"
                             inputMode="decimal"
@@ -1658,7 +1658,7 @@ export default function Nutrition() {
                               ings[idx] = { ...ings[idx], a: e.target.value };
                               return { ...prev, ingredients: ings };
                             })}
-                            className="w-12 bg-white/5 rounded px-1 py-0.5 text-[10px] text-white/60 text-right outline-none"
+                            className="w-10 bg-white/5 rounded px-1 py-0.5 text-[10px] text-white/60 text-right outline-none"
                           />
                           <span className="text-[8px] text-white/20">g</span>
                         </div>
