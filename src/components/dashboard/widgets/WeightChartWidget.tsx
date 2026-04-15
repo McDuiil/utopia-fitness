@@ -13,6 +13,7 @@ interface WeightChartWidgetProps {
 
 const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps) => {
   const [isInView, setIsInView] = useState(false);
+  const [range, setRange] = useState<'7d' | '30d' | 'all'>('7d');
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Intersection Observer for lazy rendering
@@ -32,7 +33,7 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
   }, []);
 
   const chartData = useMemo(() => {
-    const rawData = Object.entries(appData.days)
+    let rawData = Object.entries(appData.days)
       .filter(([_, data]) => (data as DayData).weight !== undefined || (data as DayData).bodyFat !== undefined)
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([date, data]) => ({
@@ -46,6 +47,13 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
       return [{ date: 'N/A', weight: appData.profile.weight, bodyFat: appData.profile.bodyFat }];
     }
 
+    // Filter by range
+    if (range === '7d') {
+      rawData = rawData.slice(-7);
+    } else if (range === '30d') {
+      rawData = rawData.slice(-30);
+    }
+
     // Downsampling algorithm (keeping peaks)
     const MAX_POINTS = 30;
     if (rawData.length <= MAX_POINTS) return rawData;
@@ -55,16 +63,12 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
 
     for (let i = 0; i < rawData.length; i += step) {
       const chunk = rawData.slice(i, i + step);
-      
-      // Find min and max weight in this chunk to preserve peaks
       let minWeightIdx = 0;
       let maxWeightIdx = 0;
       for (let j = 1; j < chunk.length; j++) {
         if ((chunk[j].weight || 0) < (chunk[minWeightIdx].weight || 0)) minWeightIdx = j;
         if ((chunk[j].weight || 0) > (chunk[maxWeightIdx].weight || 0)) maxWeightIdx = j;
       }
-
-      // Add the most significant point (or just the first one if they are the same)
       sampled.push(chunk[maxWeightIdx]);
       if (minWeightIdx !== maxWeightIdx && sampled.length < MAX_POINTS) {
         sampled.push(chunk[minWeightIdx]);
@@ -72,7 +76,7 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
     }
 
     return sampled.sort((a, b) => a.rawDate.localeCompare(b.rawDate));
-  }, [appData.days, appData.profile.weight, appData.profile.bodyFat]);
+  }, [appData.days, appData.profile.weight, appData.profile.bodyFat, range]);
 
   return (
     <motion.div
@@ -81,11 +85,24 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
       style={{ willChange: 'transform, opacity' }}
       className="col-span-2"
     >
-      <GlassCard className="h-[320px] flex flex-col p-6 overflow-hidden relative">
-        <div className="mb-6 flex items-center justify-center w-full text-purple-400">
-          <div className="flex items-center gap-2">
+      <GlassCard className="h-[340px] flex flex-col p-6 overflow-hidden relative">
+        <div className="mb-6 flex items-center justify-between w-full">
+          <div className="flex items-center gap-2 text-purple-400">
             <Activity size={18} />
             <span className="text-[10px] font-bold uppercase tracking-widest">{t("weightTrend")}</span>
+          </div>
+          <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+            {(['7d', '30d', 'all'] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`px-2 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${
+                  range === r ? "bg-purple-500 text-white" : "text-white/40 hover:text-white/60"
+                }`}
+              >
+                {r === 'all' ? t('all') || 'All' : r}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -111,7 +128,7 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="absolute inset-0"
-                style={{ touchAction: 'pan-y' }} // Prevent chart from blocking vertical scroll
+                style={{ touchAction: 'pan-y' }}
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart 
@@ -120,38 +137,40 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
                   >
                     <defs>
                       <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3} />
+                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.15} />
                         <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="colorBodyFat" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ec4899" stopOpacity={0.3} />
+                        <stop offset="5%" stopColor="#ec4899" stopOpacity={0.15} />
                         <stop offset="95%" stopColor="#ec4899" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
                     <XAxis 
                       dataKey="date" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }}
+                      tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 9 }}
                     />
                     <YAxis 
                       yId="left"
                       orientation="left"
-                      tick={{ fill: 'rgba(168, 85, 247, 0.4)', fontSize: 8 }}
+                      domain={['dataMin - 0.5', 'dataMax + 0.5']}
+                      tick={{ fill: 'rgba(168, 85, 247, 0.2)', fontSize: 8 }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis 
                       yId="right"
                       orientation="right"
-                      tick={{ fill: 'rgba(236, 72, 153, 0.4)', fontSize: 8 }}
+                      tick={{ fill: 'rgba(236, 72, 153, 0.2)', fontSize: 8 }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                      itemStyle={{ color: '#fff' }}
+                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(8px)' }}
+                      itemStyle={{ color: '#fff', fontSize: '11px' }}
+                      labelStyle={{ color: 'rgba(255,255,255,0.5)', fontSize: '10px', marginBottom: '4px' }}
                       cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1 }}
                     />
                     <Area 
@@ -163,9 +182,9 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
                       fillOpacity={1} 
                       fill="url(#colorWeight)" 
                       strokeWidth={2}
-                      dot={{ fill: '#a855f7', r: 3 }}
-                      activeDot={{ r: 5, strokeWidth: 0 }}
-                      animationDuration={500}
+                      dot={false}
+                      activeDot={{ r: 4, strokeWidth: 0, fill: '#a855f7' }}
+                      animationDuration={800}
                     />
                     <Area 
                       yId="right"
@@ -176,9 +195,9 @@ const WeightChartWidget = memo(({ appData, t, language }: WeightChartWidgetProps
                       fillOpacity={1} 
                       fill="url(#colorBodyFat)" 
                       strokeWidth={2}
-                      dot={{ fill: '#ec4899', r: 3 }}
-                      activeDot={{ r: 5, strokeWidth: 0 }}
-                      animationDuration={500}
+                      dot={false}
+                      activeDot={{ r: 4, strokeWidth: 0, fill: '#ec4899' }}
+                      animationDuration={800}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
