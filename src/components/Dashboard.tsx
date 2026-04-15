@@ -197,7 +197,7 @@ export default function Dashboard() {
       case 'deficit':
         return <DeficitWidget deficit={dailyDeficit} goal={appData.profile.goalDeficit} t={t} />;
       case 'streak':
-        return <StreakWidget appData={appData} t={t} />;
+        return <StreakWidget days={appData.days} name={appData.profile.name} t={t} />;
       case 'bodyFat':
         return (
           <BodyFatWidget 
