@@ -3,9 +3,10 @@ import { Search, Play, Plus, Clock, X, Check, Award, Settings, ChevronRight, Lay
 import GlassCard from "./GlassCard";
 import { useApp } from "@/src/context/AppContext";
 import { Exercise, WorkoutSession, WorkoutSessionExercise, DayData } from "@/src/types";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import { getTodayStr } from "../lib/utils";
 import AddWorkoutButton from "./workouts/AddWorkoutButton";
+import WorkoutSessionCard from "./workouts/WorkoutSessionCard";
 
 const EXERCISES: Exercise[] = [
   { id: '1', name: { en: 'Bench Press', zh: '卧推' }, part: 'chest', equipment: 'Barbell', image: '' },
@@ -798,76 +799,23 @@ export default function Workouts() {
                   </button>
                 </div>
               ) : (
-                workoutHistory.map(({ date, session }, idx) => {
-                  const isPlanned = session.status === 'planned';
-                  return (
-                    <GlassCard key={session.id} className={`p-4 relative group ${isPlanned ? 'border-blue-500/20 bg-blue-500/5' : ''}`} delay={idx * 0.05}>
-                      <div 
-                        className="flex items-center justify-between mb-4 cursor-pointer"
-                        onClick={() => startEditing(date, session)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isPlanned ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                            {isPlanned ? <Clock size={20} /> : <Dumbbell size={20} />}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-bold">{session.category ? t(session.category as any) : t("workouts")}</h3>
-                              {isPlanned && (
-                                <span className="rounded-md bg-blue-500/20 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-blue-400">
-                                  {t("planned")}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{date}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          {!isPlanned ? (
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-orange-400">{session.calories} kcal</p>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-                                {calculateDuration(session.startTime, session.endTime)} {t("min")}
-                              </p>
-                            </div>
-                          ) : (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startPlannedWorkout(date, session);
-                              }}
-                              className="flex items-center gap-2 rounded-full bg-blue-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/30 transition-transform active:scale-95"
-                            >
-                              <Play size={12} fill="currentColor" />
-                              {t("start")}
-                            </button>
-                          )}
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteWorkout(date, session.id);
-                            }}
-                            className="p-2 text-white/10 hover:text-red-400 transition-colors"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2 border-t border-white/5 pt-3">
-                        {session.exercises.slice(0, 3).map((ex, i) => (
-                          <div key={i} className="flex items-center justify-between text-xs text-white/60">
-                            <span>{typeof ex.name === 'string' ? ex.name : (ex.name[language] || ex.name['en'])}</span>
-                            <span className="text-white/40">{ex.sets.length} {t("sets")}</span>
-                          </div>
-                        ))}
-                        {session.exercises.length > 3 && (
-                          <p className="text-[10px] text-white/20">+{session.exercises.length - 3} more exercises</p>
-                        )}
-                      </div>
-                    </GlassCard>
-                  );
-                })
+                <LayoutGroup id="workout-history">
+                  <div className="space-y-4">
+                    {workoutHistory.map(({ date, session }) => (
+                      <WorkoutSessionCard 
+                        key={session.id}
+                        date={date}
+                        session={session}
+                        allExercises={allExercises}
+                        language={language}
+                        t={t}
+                        onEdit={startEditing}
+                        onDelete={deleteWorkout}
+                        onStartPlanned={startPlannedWorkout}
+                      />
+                    ))}
+                  </div>
+                </LayoutGroup>
               )}
             </motion.div>
           ) : (
