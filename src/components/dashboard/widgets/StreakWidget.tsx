@@ -2,47 +2,59 @@ import React, { memo, useMemo } from "react";
 import { Award } from "lucide-react";
 import { motion } from "motion/react";
 import GlassCard from "../../GlassCard";
-import { AppData } from "../../../types";
+import { DayData } from "../../../types";
 import { getTodayStr } from "../../../lib/utils";
 
 interface StreakWidgetProps {
-  appData: AppData;
+  days: Record<string, DayData>;
+  name: string;
   t: (key: string) => string;
 }
 
-const StreakWidget = memo(({ appData, t }: StreakWidgetProps) => {
+const StreakWidget = memo(({ days, name, t }: StreakWidgetProps) => {
   const streak = useMemo(() => {
-    let count = 0;
-    const todayStr = getTodayStr();
+    console.log("Streak 扫描天数:", Object.keys(days).length);
+    
+    const now = new Date();
+    const hour = now.getHours();
+    
+    // 审查起点判定
     let checkDate = new Date();
-    let isFirstDay = true;
+    if (hour < 4) {
+      // 凌晨宽限：4点前算昨天
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    
+    let count = 0;
+    let isCheckingToday = true;
     
     // Check backwards from today
     while (true) {
       const dateStr = checkDate.toLocaleDateString('en-CA');
-      const day = appData.days[dateStr];
+      const day = days[dateStr];
       
-      // Active if has workout OR has meals logged
-      const hasWorkout = day?.workoutSessions?.some(s => !s.deleted && s.exercises && s.exercises.length > 0);
+      // 三位一体判定标准：饮食、训练、身体指标
       const hasMeals = day?.meals && day.meals.length > 0;
+      const hasWorkout = day?.workoutSessions && day.workoutSessions.length > 0;
+      const hasMetrics = day?.weight !== undefined || day?.bodyFat !== undefined;
 
-      if (hasWorkout || hasMeals) {
+      if (hasMeals || hasWorkout || hasMetrics) {
         count++;
       } else {
-        // If it's today and no activity yet, don't break the streak, just check yesterday
-        // But if we already found activity in the "future" (relative to this check), 
-        // or if this isn't the first day we're checking, then a gap breaks the streak.
-        if (!isFirstDay) {
+        // 晚间保护：22:00前，如果今天没记录，不中断，继续看昨天
+        if (isCheckingToday && hour < 22) {
+          // 不加 count，但也不 break
+        } else {
           break;
         }
       }
       
       checkDate.setDate(checkDate.getDate() - 1);
-      isFirstDay = false;
+      isCheckingToday = false;
       if (count > 3650) break; // Safety break
     }
     return count;
-  }, [appData.days]);
+  }, [days]);
 
   const percentage = Math.min(100, (streak / 7) * 100);
 
@@ -85,7 +97,7 @@ const StreakWidget = memo(({ appData, t }: StreakWidgetProps) => {
     </motion.div>
   );
 }, (prev, next) => {
-  return prev.appData.days === next.appData.days;
+  return prev.days === next.days && prev.name === next.name;
 });
 
 StreakWidget.displayName = "StreakWidget";
