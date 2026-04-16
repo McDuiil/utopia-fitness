@@ -110,7 +110,6 @@ export default function Dashboard() {
   
   const [showWidgetManager, setShowWidgetManager] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [showTestPanel, setShowTestPanel] = useState(false);
   
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -223,14 +222,6 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => setShowTestPanel(!showTestPanel)}
-            className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-all active:scale-90 ${
-              showTestPanel ? "border-red-500 bg-red-500 text-white" : "border-white/10 bg-white/5 text-white/60"
-            }`}
-          >
-            <Bug size={24} />
-          </button>
-          <button 
             onClick={() => setIsEditing(!isEditing)}
             className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-all active:scale-90 ${
               isEditing ? "border-blue-500 bg-blue-500 text-white" : "border-white/10 bg-white/5 text-white/60"
@@ -248,9 +239,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* Stability Test Panel */}
-      {showTestPanel && <StabilityTest />}
 
       {/* Resume Workout Banner */}
       {activeWorkoutSession && (
