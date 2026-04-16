@@ -31,12 +31,13 @@ const StreakWidget = () => {
       const dateStr = checkDate.toLocaleDateString('en-CA');
       const day = days[dateStr];
       
-      // 三位一体判定标准：饮食、训练、身体指标
+      // 三位一体判定标准：饮食、训练、身体指标、步数
       const hasMeals = day?.meals && day.meals.length > 0;
       const hasWorkout = day?.workoutSessions && day.workoutSessions.length > 0;
       const hasMetrics = day?.weight !== undefined || day?.bodyFat !== undefined;
+      const hasSteps = day?.steps && day.steps > 0;
 
-      if (hasMeals || hasWorkout || hasMetrics) {
+      if (hasMeals || hasWorkout || hasMetrics || hasSteps) {
         count++;
       } else {
         // 晚间保护：22:00前，如果今天没记录，不中断，继续看昨天
