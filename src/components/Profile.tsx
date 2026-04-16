@@ -1,11 +1,12 @@
 import React, { ChangeEvent, useState } from "react";
-import { Settings, LogOut, ChevronRight, Award, Target, Heart, Globe, Moon, Sun, Download, Upload, X, ChevronLeft, Flame, RefreshCw, Activity } from "lucide-react";
+import { Settings, LogOut, ChevronRight, Award, Target, Heart, Globe, Moon, Sun, Download, Upload, X, ChevronLeft, Flame, RefreshCw, Activity, Bug } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { useApp } from "@/src/context/AppContext";
 import { useAppSelector } from "@/src/hooks/useAppSelector";
 import { Profile as ProfileType, DayData } from "@/src/types";
 import { SyncSettings } from "./SyncSettings";
 import { getTodayStr } from "../lib/utils";
+import StabilityTest from "./StabilityTest";
 
 export default function Profile() {
   const { t, language, setLanguage, theme, setTheme, setAppData, calculateBMR, setSelectedDate, setActiveTab, mergeData, showToast, user } = useApp();
@@ -14,6 +15,7 @@ export default function Profile() {
 
   const [showEditor, setShowEditor] = useState(false);
   const [showSync, setShowSync] = useState(false);
+  const [showTestPanel, setShowTestPanel] = useState(false);
   const [showBFHistory, setShowBFHistory] = useState(false);
   const [tempProfile, setTempProfile] = useState<ProfileType>(profile);
   const [historyDate, setHistoryDate] = useState(getTodayStr());
@@ -87,31 +89,48 @@ export default function Profile() {
   const today = getTodayStr();
 
   const calculateStreak = () => {
-    let streak = 0;
-    let checkDate = new Date();
+    if (!days) return 0;
     
+    const now = new Date();
+    const hour = now.getHours();
+    
+    // 审查起点判定
+    let checkDate = new Date();
+    if (hour < 4) {
+      // 凌晨宽限：4点前算昨天
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    
+    let count = 0;
+    let isCheckingToday = true;
+    
+    // Check backwards from today
     while (true) {
       const dateStr = checkDate.toLocaleDateString('en-CA');
       const day = days[dateStr];
-      const hasActivity = day && (
-        (day.meals && day.meals.length > 0) || 
-        (day.workoutSessions && day.workoutSessions.length > 0) ||
-        (day.steps && day.steps > 0)
-      );
+      
+      // 三位一体判定标准：饮食、训练、身体指标、步数
+      const hasMeals = day?.meals && day.meals.length > 0;
+      const hasWorkout = day?.workoutSessions && day.workoutSessions.length > 0;
+      const hasMetrics = day?.weight !== undefined || day?.bodyFat !== undefined;
+      const hasSteps = day?.steps && day.steps > 0;
 
-      if (hasActivity) {
-        streak++;
-        checkDate.setDate(checkDate.getDate() - 1);
+      if (hasMeals || hasWorkout || hasMetrics || hasSteps) {
+        count++;
       } else {
-        // If it's today and no activity yet, don't break the streak, just check yesterday
-        if (dateStr === today) {
-          checkDate.setDate(checkDate.getDate() - 1);
-          continue;
+        // 晚间保护：22:00前，如果今天没记录，不中断，继续看昨天
+        if (isCheckingToday && hour < 22) {
+          // 不加 count，但也不 break
+        } else {
+          break;
         }
-        break;
       }
+      
+      checkDate.setDate(checkDate.getDate() - 1);
+      isCheckingToday = false;
+      if (count > 3650) break; // Safety break
     }
-    return streak;
+    return count;
   };
 
   const streak = calculateStreak();
@@ -457,6 +476,27 @@ export default function Profile() {
             </div>
             <ChevronRight size={20} className="text-white/40 dark:text-white/40 light:text-black/40" />
           </GlassCard>
+
+          {/* Stability Test */}
+          <GlassCard 
+            className="flex items-center justify-between p-4 cursor-pointer" 
+            delay={0.8}
+            onClick={() => setShowTestPanel(!showTestPanel)}
+          >
+            <div className="flex items-center gap-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] dark:bg-white/[0.06] light:bg-black/5 ${showTestPanel ? 'text-red-500' : 'text-orange-400'}`}>
+                <Bug size={20} />
+              </div>
+              <span className="font-medium">{t("stabilityTest")}</span>
+            </div>
+            <span className="text-sm font-bold text-white/40 dark:text-white/40 light:text-black/40">{t("systemStability")}</span>
+          </GlassCard>
+
+          {showTestPanel && (
+            <div className="pt-2">
+              <StabilityTest />
+            </div>
+          )}
 
           {/* Import/Export (Legacy) */}
           <div className="grid grid-cols-2 gap-2 opacity-50">
