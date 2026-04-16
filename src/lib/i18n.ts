@@ -222,6 +222,8 @@ export const translations = {
     daysUnit: "days",
     keepGoing: "Keep it up!",
     startToday: "Start today!",
+    stabilityTest: "Stability Test",
+    systemStability: "System Stability",
   },
   zh: {
     dashboard: "仪表盘",
@@ -446,5 +448,7 @@ export const translations = {
     daysUnit: "天",
     keepGoing: "继续保持！",
     startToday: "今天开始！",
+    stabilityTest: "稳定性测试",
+    systemStability: "系统稳定性",
   }
 };
