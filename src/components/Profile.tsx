@@ -1,9 +1,10 @@
 import React, { ChangeEvent, useState } from "react";
+import { useScrollLock } from "../hooks/useScrollLock";
 import { Settings, LogOut, ChevronRight, Award, Target, Heart, Globe, Moon, Sun, Download, Upload, X, ChevronLeft, Flame, RefreshCw, Activity, Bug } from "lucide-react";
 import GlassCard from "./GlassCard";
-import { useApp } from "@/src/context/AppContext";
-import { useAppSelector } from "@/src/hooks/useAppSelector";
-import { Profile as ProfileType, DayData } from "@/src/types";
+import { useApp } from "../context/AppContext";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { Profile as ProfileType, DayData } from "../types";
 import { SyncSettings } from "./SyncSettings";
 import { getTodayStr } from "../lib/utils";
 import StabilityTest from "./StabilityTest";
@@ -139,6 +140,10 @@ export default function Profile() {
   const workoutCalories = (dayData.workoutSessions || []).reduce((sum, s) => sum + (s.calories || 0), 0);
   const dailyDeficit = (currentBMR + workoutCalories) - mealCalories;
 
+  // Unified Scroll Lock
+  const isAnyModalOpen = showEditor || showSync || showTestPanel || showBFHistory;
+  useScrollLock(isAnyModalOpen);
+
   // Calendar Logic
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
@@ -216,160 +221,167 @@ export default function Profile() {
 
       {/* Profile Editor Modal */}
       {showEditor && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 dark:border-white/20 dark:bg-black/80 light:border-black/10 light:bg-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 modal-mobile-dynamic flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-6 border-b border-white/5 flex items-center justify-between flex-shrink-0">
               <h2 className="text-xl font-bold">{t("profileSettings")}</h2>
-              <button onClick={() => setShowEditor(false)} className="text-white/40 hover:text-white dark:text-white/40 light:text-black/40">
+              <button 
+                onClick={() => setShowEditor(false)} 
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-white/40 hover:text-white transition-colors"
+              >
                 <X size={20} />
               </button>
             </div>
             
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("nickname")}</label>
-                <input 
-                  type="text" 
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
-                  value={tempProfile.nickname}
-                  onChange={e => setTempProfile({...tempProfile, nickname: e.target.value})}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("avatar")}</label>
-                <div className="flex gap-2">
+            <div className="flex-1 modal-content-area p-6 space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("nickname")}</label>
                   <input 
                     type="text" 
-                    className="flex-1 rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
-                    placeholder="Image URL"
-                    value={tempProfile.avatar}
-                    onChange={e => setTempProfile({...tempProfile, avatar: e.target.value})}
+                    className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                    value={tempProfile.nickname}
+                    onChange={e => setTempProfile({...tempProfile, nickname: e.target.value})}
                   />
-                  <label className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-white/[0.06] hover:bg-white/[0.08]">
-                    <Upload size={18} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("avatar")}</label>
+                  <div className="flex gap-2">
                     <input 
-                      type="file" 
-                      className="hidden" 
-                      accept="image/*" 
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setTempProfile({...tempProfile, avatar: reader.result as string});
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }} 
+                      type="text" 
+                      className="flex-1 rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                      placeholder="Image URL"
+                      value={tempProfile.avatar}
+                      onChange={e => setTempProfile({...tempProfile, avatar: e.target.value})}
                     />
-                  </label>
+                    <label className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-white/[0.06] hover:bg-white/[0.08]">
+                      <Upload size={18} />
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        accept="image/*" 
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setTempProfile({...tempProfile, avatar: reader.result as string});
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }} 
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("gender")}</label>
+                  <select 
+                    className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                    value={tempProfile.gender}
+                    onChange={e => setTempProfile({...tempProfile, gender: e.target.value as any})}
+                  >
+                    <option value="male" className="bg-gray-900">{t("male")}</option>
+                    <option value="female" className="bg-gray-900">{t("female")}</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("age")}</label>
+                  <input 
+                    type="number" 
+                    inputMode="numeric"
+                    className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                    value={tempProfile.age}
+                    onChange={e => setTempProfile({...tempProfile, age: Number(e.target.value)})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("height")} (cm)</label>
+                  <input 
+                    type="number" 
+                    inputMode="decimal"
+                    className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                    value={tempProfile.height}
+                    onChange={e => setTempProfile({...tempProfile, height: Number(e.target.value)})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("weight")} (kg)</label>
+                  <input 
+                    type="number" 
+                    inputMode="decimal"
+                    className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                    value={tempProfile.weight}
+                    onChange={e => setTempProfile({...tempProfile, weight: Number(e.target.value)})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("bodyFat")} (%)</label>
+                  <input 
+                    type="number" 
+                    inputMode="decimal"
+                    className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                    value={tempProfile.bodyFat}
+                    onChange={e => setTempProfile({...tempProfile, bodyFat: Number(e.target.value)})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("bmr")}</label>
+                  <button 
+                    onClick={() => setTempProfile({...tempProfile, useCustomBMR: !tempProfile.useCustomBMR})}
+                    className="text-[10px] font-bold text-blue-400"
+                  >
+                    {tempProfile.useCustomBMR ? t("autoBMR") : t("manualBMR")}
+                  </button>
+                </div>
+                <input 
+                  type="number" 
+                  inputMode="decimal"
+                  disabled={!tempProfile.useCustomBMR}
+                  className={`w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none ${!tempProfile.useCustomBMR ? "opacity-50" : ""}`}
+                  value={tempProfile.useCustomBMR ? tempProfile.customBMR : calculateBMR(tempProfile)}
+                  onChange={e => setTempProfile({...tempProfile, customBMR: Number(e.target.value)})}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("goalWeight")}</label>
+                  <input 
+                    type="number" 
+                    inputMode="decimal"
+                    className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                    value={tempProfile.goalWeight}
+                    onChange={e => setTempProfile({...tempProfile, goalWeight: Number(e.target.value)})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("goalBodyFat")} (%)</label>
+                  <input 
+                    type="number" 
+                    inputMode="decimal"
+                    className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none"
+                    value={tempProfile.goalBodyFat}
+                    onChange={e => setTempProfile({...tempProfile, goalBodyFat: Number(e.target.value)})}
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("gender")}</label>
-                <select 
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5 dark:text-white light:text-black"
-                  value={tempProfile.gender}
-                  onChange={e => setTempProfile({...tempProfile, gender: e.target.value as any})}
-                >
-                  <option value="male">{t("male")}</option>
-                  <option value="female">{t("female")}</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("age")}</label>
-                <input 
-                  type="number" 
-                  inputMode="numeric"
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
-                  value={tempProfile.age}
-                  onChange={e => setTempProfile({...tempProfile, age: Number(e.target.value)})}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("height")} (cm)</label>
-                <input 
-                  type="number" 
-                  inputMode="decimal"
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
-                  value={tempProfile.height}
-                  onChange={e => setTempProfile({...tempProfile, height: Number(e.target.value)})}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("weight")} (kg)</label>
-                <input 
-                  type="number" 
-                  inputMode="decimal"
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
-                  value={tempProfile.weight}
-                  onChange={e => setTempProfile({...tempProfile, weight: Number(e.target.value)})}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("bodyFat")} (%)</label>
-                <input 
-                  type="number" 
-                  inputMode="decimal"
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
-                  value={tempProfile.bodyFat}
-                  onChange={e => setTempProfile({...tempProfile, bodyFat: Number(e.target.value)})}
-                />
-              </div>
+            <div className="p-6 border-t border-white/5 bg-white/[0.02] flex-shrink-0 modal-footer-safe">
+              <button 
+                onClick={handleSaveProfile}
+                className="w-full rounded-2xl bg-white py-4 text-sm font-bold text-black transition-transform active:scale-95 shadow-xl hover:bg-opacity-90"
+              >
+                {t("save")}
+              </button>
             </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("bmr")}</label>
-                <button 
-                  onClick={() => setTempProfile({...tempProfile, useCustomBMR: !tempProfile.useCustomBMR})}
-                  className="text-[10px] font-bold text-blue-400"
-                >
-                  {tempProfile.useCustomBMR ? t("autoBMR") : t("manualBMR")}
-                </button>
-              </div>
-              <input 
-                type="number" 
-                inputMode="decimal"
-                disabled={!tempProfile.useCustomBMR}
-                className={`w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5 ${!tempProfile.useCustomBMR ? "opacity-50" : ""}`}
-                value={tempProfile.useCustomBMR ? tempProfile.customBMR : calculateBMR(tempProfile)}
-                onChange={e => setTempProfile({...tempProfile, customBMR: Number(e.target.value)})}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("goalWeight")}</label>
-                <input 
-                  type="number" 
-                  inputMode="decimal"
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
-                  value={tempProfile.goalWeight}
-                  onChange={e => setTempProfile({...tempProfile, goalWeight: Number(e.target.value)})}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-white/40 dark:text-white/40 light:text-black/40">{t("goalBodyFat")} (%)</label>
-                <input 
-                  type="number" 
-                  inputMode="decimal"
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 text-sm outline-none dark:bg-white/[0.06] light:bg-black/5"
-                  value={tempProfile.goalBodyFat}
-                  onChange={e => setTempProfile({...tempProfile, goalBodyFat: Number(e.target.value)})}
-                />
-              </div>
-            </div>
-
-            <button 
-              onClick={handleSaveProfile}
-              className="w-full rounded-2xl bg-white py-3 text-sm font-bold text-black transition-transform active:scale-95 dark:bg-white dark:text-black light:bg-black light:text-white"
-            >
-              {t("save")}
-            </button>
           </GlassCard>
         </div>
       )}
@@ -522,16 +534,19 @@ export default function Profile() {
 
       {/* Body Fat History Modal */}
       {showBFHistory && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
-          <GlassCard className="w-full max-w-sm max-h-[80vh] flex flex-col border-white/20 bg-black/80 p-0 overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 modal-mobile-dynamic flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-white/10 flex-shrink-0">
               <h2 className="text-xl font-bold">{t("bodyFatHistory")}</h2>
-              <button onClick={() => setShowBFHistory(false)} className="text-white/40 hover:text-white">
+              <button 
+                onClick={() => setShowBFHistory(false)} 
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-white/40 hover:text-white transition-colors"
+              >
                 <X size={24} />
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
+            <div className="flex-1 modal-content-area p-6 space-y-6">
               {/* Add Past Record Section */}
               <div className="space-y-3 rounded-2xl bg-white/[0.06] p-4 border border-white/5">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-blue-400">{t("addPastRecord")}</h3>
