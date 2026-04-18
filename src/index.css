@@ -3,6 +3,8 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --tabbar-height: 70px;
+  --tabbar-gap: 32px;
 }
 
 *, ::before, ::after {
@@ -11,9 +13,10 @@
 
 html, body {
   width: 100%;
-  min-height: 100%;
+  min-height: 100dvh;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -27,7 +30,8 @@ body {
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
-  touch-action: manipulation;
+  touch-action: pan-y;
+  min-height: 100dvh;
 }
 
 .glass-card {
@@ -42,19 +46,28 @@ body {
   @apply absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none z-0;
 }
 
+/* [MODIFIED] 优化 glass-strong：彻底解决“灰色边框”污染，使用极低 alpha 背景 */
 .glass-strong {
-  @apply rounded-[2.5rem] border border-white/15 bg-white/[0.08] backdrop-blur-xl backdrop-saturate-150;
-  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.6), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+  @apply rounded-[2.5rem] border border-white/20 bg-white/[0.02] backdrop-blur-3xl backdrop-saturate-150 backdrop-contrast-90;
+  box-shadow: 
+    0 20px 50px -12px rgba(0, 0, 0, 0.6), 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.2); 
 }
 
+/* [MODIFIED] 优化 glass-medium：平衡透明度与模糊度 */
 .glass-medium {
-  @apply rounded-[2rem] border border-white/10 bg-white/[0.06] backdrop-blur-lg backdrop-saturate-150;
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4), inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.08);
+  @apply rounded-[2rem] border border-white/20 bg-white/[0.04] backdrop-blur-2xl backdrop-saturate-150 backdrop-contrast-90;
+  box-shadow: 
+    0 10px 30px -10px rgba(0, 0, 0, 0.4), 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
 }
 
+/* [MODIFIED] 优化 glass-weak：极简透明质感 */
 .glass-weak {
-  @apply rounded-full border border-white/5 bg-white/[0.04] backdrop-blur backdrop-saturate-150;
-  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.3), inset 0 0.5px 0.5px 0 rgba(255, 255, 255, 0.05);
+  @apply rounded-full border border-white/20 bg-white/[0.02] backdrop-blur-xl backdrop-saturate-150 backdrop-contrast-90;
+  box-shadow: 
+    0 4px 20px -5px rgba(0, 0, 0, 0.3), 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
 }
 
 .apple-button {
@@ -65,7 +78,45 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* --- Step 4: Scroll Isolation and Modal Utilities --- */
+.scroll-lock {
+  overflow: hidden !important;
+}
+
+.modal-content-area {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.modal-mobile-dynamic {
+  max-height: calc(100dvh - var(--tabbar-height) - var(--tabbar-gap) - env(safe-area-inset-bottom, 16px));
+  margin-bottom: calc(var(--tabbar-height) + var(--tabbar-gap) + env(safe-area-inset-bottom, 16px));
+}
+
+.modal-footer-safe {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.modal-content-area::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- iOS Safe Area Helpers --- */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
 input, select, textarea { font-size: 16px !important; }
 @media (min-width: 768px) {
   input, select, textarea { font-size: inherit !important; }
 }
+
+/* --- Final Calibrations --- */
+.menu-no-pierce { pointer-events: auto; }
+.session-footer-clean { background: transparent !important; border: none !important; backdrop-filter: none !important; }
