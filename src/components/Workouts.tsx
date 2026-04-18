@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from "react";
 import { Search, Play, Plus, Clock, X, Check, Award, Settings, ChevronRight, LayoutDashboard, History as HistoryIcon, Dumbbell, Flame } from "lucide-react";
 import GlassCard from "./GlassCard";
-import { useApp } from "@/src/context/AppContext";
+import { useApp } from "../context/AppContext";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useScrollLock } from "../hooks/useScrollLock";
-import { Exercise, WorkoutSession, WorkoutSessionExercise, DayData } from "@/src/types";
+import { Exercise, WorkoutSession, WorkoutSessionExercise, DayData } from "../types";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import { getTodayStr } from "../lib/utils";
 import AddWorkoutButton from "./workouts/AddWorkoutButton";
