@@ -3,6 +3,7 @@ import { Search, Play, Plus, Clock, X, Check, Award, Settings, ChevronRight, Lay
 import GlassCard from "./GlassCard";
 import { useApp } from "@/src/context/AppContext";
 import { useAppSelector } from "@/src/hooks/useAppSelector";
+import { useScrollLock } from "@/src/hooks/useScrollLock";
 import { Exercise, WorkoutSession, WorkoutSessionExercise, DayData } from "@/src/types";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import { getTodayStr } from "../lib/utils";
@@ -56,6 +57,14 @@ export default function Workouts() {
   const [isPlanning, setIsPlanning] = useState(false);
   const [planningSession, setPlanningSession] = useState<WorkoutSession | null>(null);
 
+  // Unified Scroll Lock
+  const isAnyModalOpen = !!editingSession || !!deletingSession || showCategoryPicker || showExercisePicker || showCustomExerciseModal || showAddCategoryModal || !!activeSession || !!planningSession;
+  useScrollLock(isAnyModalOpen);
+
+  // Refs for auto-scrolling
+  const activeSessionContentRef = React.useRef<HTMLDivElement>(null);
+  const planningSessionContentRef = React.useRef<HTMLDivElement>(null);
+
   const handleStartNewWorkout = React.useCallback(() => {
     setIsPlanning(false);
     setShowCategoryPicker(true);
@@ -95,17 +104,6 @@ export default function Workouts() {
     equipment: '',
     image: 'https://images.unsplash.com/photo-1581009146145-b5ef03a7403f?w=400&auto=format&fit=crop&q=60'
   });
-
-  // Body scroll lock
-  React.useEffect(() => {
-    const isModalOpen = !!editingSession || !!deletingSession || showCategoryPicker || showExercisePicker || showCustomExerciseModal || showAddCategoryModal || isPlanning;
-    if (isModalOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => { document.body.style.overflow = ''; };
-  }, [editingSession, deletingSession, showCategoryPicker, showExercisePicker, showCustomExerciseModal, showAddCategoryModal, isPlanning]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
@@ -302,6 +300,14 @@ export default function Workouts() {
       const lastSet = newExercises[exIndex].sets[newExercises[exIndex].sets.length - 1];
       newExercises[exIndex].sets.push({ ...lastSet, isPR: false });
       setPlanningSession({ ...planningSession, exercises: newExercises });
+      
+      // Auto-scroll to new set
+      setTimeout(() => {
+        planningSessionContentRef.current?.scrollTo({
+          top: planningSessionContentRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }, 50);
       return;
     }
 
@@ -310,6 +316,14 @@ export default function Workouts() {
     const lastSet = newExercises[exIndex].sets[newExercises[exIndex].sets.length - 1];
     newExercises[exIndex].sets.push({ ...lastSet, isPR: false });
     setActiveSession({ ...activeSession, exercises: newExercises });
+
+    // Auto-scroll to new set
+    setTimeout(() => {
+      activeSessionContentRef.current?.scrollTo({
+        top: activeSessionContentRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }, 50);
   };
 
   const deleteWorkout = (date: string, sessionId: string) => {
@@ -497,7 +511,7 @@ export default function Workouts() {
   };
 
   return (
-    <div className="min-h-screen space-y-6 pb-32 pt-[calc(2rem+env(safe-area-inset-top,0px))]">
+    <div className="min-h-dvh space-y-6 pb-32 pt-[calc(2rem+env(safe-area-inset-top,0px))]">
       {/* Header */}
       <div className="flex items-center justify-between px-4">
         <h1 className="text-3xl font-bold tracking-tight">{t("workouts")}</h1>
@@ -540,10 +554,11 @@ export default function Workouts() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="h-full"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"
+              style={{ paddingBottom: 'calc(var(--tabbar-height, 70px) + 32px + 12px + env(safe-area-inset-bottom, 0px))' }}
             >
-              <GlassCard className="flex flex-col max-h-[calc(100vh-14rem)] border-blue-500/30 bg-blue-500/5 p-0 overflow-hidden">
-                <div className="p-6 border-b border-white/5 bg-white/[0.02] backdrop-blur-xl z-20">
+              <GlassCard className="flex flex-col w-full max-w-sm h-full border-blue-500/30 bg-black/95 p-0 shadow-2xl relative">
+                <div className="p-6 border-b border-white/5 bg-white/[0.02] backdrop-blur-xl z-20 flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-xl font-bold text-blue-400">{t("trainingPlan")}</h2>
@@ -561,7 +576,10 @@ export default function Workouts() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
+                <div 
+                  ref={planningSessionContentRef}
+                  className="flex-1 modal-content-area p-6 pb-32 space-y-6 no-scrollbar"
+                >
                   <div className="space-y-4">
                     {planningSession.exercises.map((sessionEx, exIdx) => {
                       const exercise = allExercises.find(e => e.id === sessionEx.exerciseId);
@@ -631,23 +649,22 @@ export default function Workouts() {
                       );
                     })}
                   </div>
+                </div>
 
-                  <div className="flex gap-3 pt-4">
-                    <button 
-                      onClick={() => setShowExercisePicker(true)}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/[0.06] py-4 font-bold transition-colors hover:bg-white/[0.08]"
-                    >
-                      <Plus size={20} />
-                      {t("addExercise")}
-                    </button>
-                    <button 
-                      onClick={savePlanningSession}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-blue-500 py-4 font-bold text-white shadow-lg shadow-blue-500/20 transition-transform active:scale-95"
-                    >
-                      <Check size={20} />
-                      {t("save")}
-                    </button>
-                  </div>
+                <div className="px-6 pt-4 flex gap-3 flex-shrink-0 z-20 session-footer-clean h-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+                  <button 
+                    onClick={() => setShowExercisePicker(true)}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/[0.06] py-4 font-bold transition-colors hover:bg-white/[0.08]"
+                  >
+                    <Plus size={20} />
+                  </button>
+                  <button 
+                    onClick={savePlanningSession}
+                    className="flex-[2] flex items-center justify-center gap-2 rounded-2xl bg-blue-500 py-4 font-bold text-white shadow-lg shadow-blue-500/20 transition-transform active:scale-95"
+                  >
+                    <Check size={20} />
+                    {t("save")}
+                  </button>
                 </div>
               </GlassCard>
             </motion.div>
@@ -657,11 +674,12 @@ export default function Workouts() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="h-full"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"
+              style={{ paddingBottom: 'calc(var(--tabbar-height, 70px) + 32px + 12px + env(safe-area-inset-bottom, 0px))' }}
             >
-              <GlassCard className="flex flex-col max-h-[calc(100vh-14rem)] border-blue-500/30 bg-blue-500/5 p-0 overflow-hidden">
+              <GlassCard className="flex flex-col w-full max-w-sm h-full border-blue-500/30 bg-black/95 p-0 relative shadow-2xl">
                 {/* Sticky Header */}
-                <div className="p-6 border-b border-white/5 bg-white/[0.02] backdrop-blur-xl z-20">
+                <div className="p-6 border-b border-white/5 bg-white/[0.02] backdrop-blur-xl z-20 flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-3">
@@ -699,7 +717,10 @@ export default function Workouts() {
                 </div>
 
                 {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar">
+                <div 
+                  ref={activeSessionContentRef}
+                  className="flex-1 modal-content-area p-6 pb-32 space-y-6 no-scrollbar"
+                >
                   <div className="space-y-4">
                     {activeSession.exercises.map((sessionEx, exIdx) => {
                       const exercise = allExercises.find(e => e.id === sessionEx.exerciseId);
@@ -772,23 +793,22 @@ export default function Workouts() {
                       );
                     })}
                   </div>
+                </div>
 
-                  <div className="flex gap-3 pt-4">
-                    <button 
-                      onClick={() => setShowExercisePicker(true)}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/[0.06] py-4 font-bold transition-colors hover:bg-white/[0.08]"
-                    >
-                      <Plus size={20} />
-                      {t("addExercise")}
-                    </button>
-                    <button 
-                      onClick={finishSession}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-green-500 py-4 font-bold text-white shadow-lg shadow-green-500/20 transition-transform active:scale-95"
-                    >
-                      <Check size={20} />
-                      {t("endWorkout")}
-                    </button>
-                  </div>
+                <div className="px-6 pt-4 flex gap-3 flex-shrink-0 z-20 sticky bottom-0 session-footer-clean h-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}>
+                  <button 
+                    onClick={() => setShowExercisePicker(true)}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/[0.06] py-4 font-bold transition-colors hover:bg-white/[0.08]"
+                  >
+                    <Plus size={20} />
+                  </button>
+                  <button 
+                    onClick={finishSession}
+                    className="flex-[2] flex items-center justify-center gap-2 rounded-2xl bg-green-500 py-4 font-bold text-white shadow-lg shadow-green-500/20 transition-transform active:scale-95"
+                  >
+                    <Check size={20} />
+                    {t("endWorkout")}
+                  </button>
                 </div>
               </GlassCard>
             </motion.div>
@@ -911,8 +931,8 @@ export default function Workouts() {
 
         {/* Edit Session Modal */}
         {editingSession && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 pb-24 backdrop-blur-md">
-            <GlassCard className="w-full max-w-lg max-h-[80vh] flex flex-col p-0 border-white/20 bg-black/90 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md" style={{ paddingBottom: 'calc(var(--tabbar-height, 70px) + env(safe-area-inset-bottom, 0px) + 20px)' }}>
+            <GlassCard className="w-full max-w-lg h-full flex flex-col p-0 border-white/20 bg-black/90 shadow-2xl relative">
               {/* Sticky Header */}
               <div className="flex items-center justify-between p-6 border-b border-white/5 bg-white/[0.02] backdrop-blur-xl z-20">
                 <div>
@@ -1191,11 +1211,14 @@ export default function Workouts() {
 
       {/* Add Category Modal */}
       {showAddCategoryModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
-          <GlassCard className="w-full max-w-sm space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <GlassCard className="w-full max-w-sm space-y-4 border-white/20 bg-black/80 shadow-2xl p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("customCategory") || "Custom Category"}</h2>
-              <button onClick={() => setShowAddCategoryModal(false)} className="text-white/40 hover:text-white">
+              <button 
+                onClick={() => setShowAddCategoryModal(false)} 
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-white/40 hover:text-white transition-colors"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -1211,7 +1234,7 @@ export default function Workouts() {
               />
               <button 
                 onClick={handleAddCategory}
-                className="w-full rounded-2xl bg-blue-500 py-4 font-bold text-white shadow-lg shadow-blue-500/20"
+                className="w-full rounded-2xl bg-blue-500 py-4 font-bold text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-transform"
               >
                 {t("save")}
               </button>
@@ -1222,19 +1245,19 @@ export default function Workouts() {
 
       {/* Exercise Picker Modal (During Session) */}
       {showExercisePicker && (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-black/90 backdrop-blur-3xl">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/90 h-dvh overflow-hidden">
           {/* Header with safe area and Apple styling */}
-          <div className="flex items-center justify-between px-6 pb-4 pt-[calc(2.5rem+env(safe-area-inset-top,0px))]">
+          <div className="flex items-center justify-between px-6 pb-4 pt-[calc(1.5rem+env(safe-area-inset-top,0px))] flex-shrink-0">
             <h2 className="text-3xl font-bold tracking-tight">{t("addExercise")}</h2>
             <button 
               onClick={() => setShowExercisePicker(false)} 
-              className="apple-button h-10 w-10 bg-white/[0.06] text-white/80"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/[0.06] text-white/80 hover:bg-white/[0.1] transition-colors"
             >
               <X size={20} />
             </button>
           </div>
           
-          <div className="px-6 flex gap-3 mb-4">
+          <div className="px-6 flex gap-3 mb-4 flex-shrink-0">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={18} />
               <input
@@ -1250,14 +1273,14 @@ export default function Workouts() {
                 setIsAddingFromPicker(true);
                 setShowCustomExerciseModal(true);
               }}
-              className="apple-button h-14 w-14 bg-blue-500 text-white shadow-lg shadow-blue-500/30"
+              className="w-14 h-14 flex items-center justify-center rounded-2xl bg-blue-500 text-white shadow-lg shadow-blue-500/30 active:scale-95 transition-transform"
             >
               <Plus size={24} />
             </button>
           </div>
 
           {/* Category Filter Row in Picker */}
-          <div className="px-6 mb-6 overflow-x-auto no-scrollbar">
+          <div className="px-6 mb-6 overflow-x-auto no-scrollbar flex-shrink-0">
             <div className="flex gap-2 min-w-max">
               <button
                 onClick={() => setFilter("all")}
@@ -1277,7 +1300,7 @@ export default function Workouts() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 no-scrollbar px-6 pb-24">
+          <div className="flex-1 modal-content-area px-6 mb-[var(--tabbar-height)] pb-[env(safe-area-inset-bottom,20px)] no-scrollbar">
             {filteredExercises.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-white/20">
                 <Search size={48} strokeWidth={1} className="mb-4" />
@@ -1337,55 +1360,62 @@ export default function Workouts() {
 
       {/* Custom Exercise Modal */}
       {showCustomExerciseModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
-          <GlassCard className="w-full max-w-sm space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 shadow-2xl modal-mobile-dynamic flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-white/5 flex items-center justify-between flex-shrink-0">
               <h2 className="text-xl font-bold">{t("customExercise")}</h2>
-              <button onClick={() => setShowCustomExerciseModal(false)} className="text-white/40 hover:text-white">
+              <button 
+                onClick={() => setShowCustomExerciseModal(false)} 
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-white/40 hover:text-white transition-colors"
+              >
                 <X size={20} />
               </button>
             </div>
             
-                    <div className="space-y-5">
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                          <Dumbbell size={12} className="text-blue-400" />
-                          {t("exerciseName")}
-                        </label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. Bench Press"
-                          className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
-                          value={newExercise.name?.zh}
-                          onChange={e => setNewExercise({...newExercise, name: { en: e.target.value, zh: e.target.value }})}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
-                          <LayoutDashboard size={12} className="text-purple-400" />
-                          {t("filterByPart")}
-                        </label>
-                        <div className="relative">
-                          <select 
-                            className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none appearance-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
-                            value={newExercise.part}
-                            onChange={e => setNewExercise({...newExercise, part: e.target.value as any})}
-                          >
-                            {allCategories.map(p => (
-                              <option key={p} value={p} className="bg-gray-900">{t(p as any) || p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                            ))}
-                          </select>
-                          <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none text-white/20" />
-                        </div>
-                      </div>
-                    </div>
+            <div className="flex-1 modal-content-area p-6 space-y-6">
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                    <Dumbbell size={12} className="text-blue-400" />
+                    {t("exerciseName")}
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Bench Press"
+                    className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
+                    value={newExercise.name?.zh}
+                    onChange={e => setNewExercise({...newExercise, name: { en: e.target.value, zh: e.target.value }})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                    <LayoutDashboard size={12} className="text-purple-400" />
+                    {t("filterByPart")}
+                  </label>
+                  <div className="relative">
+                    <select 
+                      className="w-full rounded-2xl bg-white/5 px-4 py-4 outline-none appearance-none border border-white/10 focus:border-blue-500/50 focus:bg-white/[0.08] transition-all"
+                      value={newExercise.part}
+                      onChange={e => setNewExercise({...newExercise, part: e.target.value as any})}
+                    >
+                      {allCategories.map(p => (
+                        <option key={p} value={p} className="bg-gray-900">{t(p as any) || p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                      ))}
+                    </select>
+                    <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none text-white/20" />
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <button 
-              onClick={handleAddCustomExercise}
-              className="w-full rounded-2xl bg-white py-4 font-bold text-black transition-transform active:scale-95"
-            >
-              {t("save")}
-            </button>
+            <div className="p-6 border-t border-white/5 modal-footer-safe">
+              <button 
+                onClick={handleAddCustomExercise}
+                className="w-full rounded-2xl bg-white py-4 font-bold text-black transition-transform active:scale-95 shadow-xl hover:bg-opacity-90"
+              >
+                {t("save")}
+              </button>
+            </div>
           </GlassCard>
         </div>
       )}
