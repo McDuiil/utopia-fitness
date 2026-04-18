@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Clock, ChevronRight, PieChart, Utensils, X, Calendar, Zap, Settings, Save, RefreshCw, Lock, Unlock, Search, Info, FileUp, Sparkles, Check, Trash2, Edit2, Minus } from "lucide-react";
 import GlassCard from "./GlassCard";
-import { useAppSelector } from "@/src/hooks/useAppSelector";
-import { useScrollLock } from "@/src/hooks/useScrollLock";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { useScrollLock } from "../hooks/useScrollLock";
 import { CustomMeal, NutritionSettings, MacroGrams, DayTypeConfig, FoodItem, DietTemplate, SuggestedMeal, Ingredient } from "@/src/types";
 import { motion, AnimatePresence } from "motion/react";
 import { getTodayStr, calcCalories } from "../lib/utils";
