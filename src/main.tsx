@@ -1,4 +1,4 @@
-import {StrictMode} from 'react';
+import {StrictMode, useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
@@ -31,12 +31,42 @@ const GlobalFallback = () => (
   </div>
 );
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ErrorBoundary name="Global" fallback={<GlobalFallback />}>
-      <AppProvider>
-        <App />
-      </AppProvider>
-    </ErrorBoundary>
-  </StrictMode>,
-);
+const Root = () => {
+  useEffect(() => {
+    // Prevent zooming on double tap for mobile safari
+    const preventZoom = (event: TouchEvent) => {
+      if (event.touches.length > 1) {
+        event.preventDefault();
+      }
+    };
+
+    let lastTouchEnd = 0;
+    const preventDoubleTapZoom = (event: TouchEvent) => {
+      const now = (new Date()).getTime();
+      if (now - lastTouchEnd <= 300) {
+        event.preventDefault();
+      }
+      lastTouchEnd = now;
+    };
+
+    document.addEventListener('touchstart', preventZoom, { passive: false });
+    document.addEventListener('touchend', preventDoubleTapZoom, false);
+
+    return () => {
+      document.removeEventListener('touchstart', preventZoom);
+      document.removeEventListener('touchend', preventDoubleTapZoom);
+    };
+  }, []);
+
+  return (
+    <StrictMode>
+      <ErrorBoundary name="Global" fallback={<GlobalFallback />}>
+        <AppProvider>
+          <App />
+        </AppProvider>
+      </ErrorBoundary>
+    </StrictMode>
+  );
+};
+
+createRoot(document.getElementById('root')!).render(<Root />);
