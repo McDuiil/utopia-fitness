@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Plus, Clock, ChevronRight, PieChart, Utensils, X, Calendar, Zap, Settings, Save, RefreshCw, Lock, Unlock, Search, Info, FileUp, Sparkles, Check, Trash2, Edit2, Minus } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { useAppSelector } from "@/src/hooks/useAppSelector";
+import { useScrollLock } from "@/src/hooks/useScrollLock";
 import { CustomMeal, NutritionSettings, MacroGrams, DayTypeConfig, FoodItem, DietTemplate, SuggestedMeal, Ingredient } from "@/src/types";
 import { motion, AnimatePresence } from "motion/react";
 import { getTodayStr, calcCalories } from "../lib/utils";
@@ -48,6 +49,14 @@ export default function Nutrition() {
   const [editingMealDraft, setEditingMealDraft] = useState<CustomMeal | null>(null);
   const [isPhaseReminderDismissed, setIsPhaseReminderDismissed] = useState(false);
 
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState<NutritionSettings>(nutritionSettings);
+  const [inputMode, setInputMode] = useState<'grams' | 'percentage'>('grams');
+
+  // Unified Scroll Lock
+  const isAnyModalOpen = showAddMeal || showImport || showSettings || showClearConfirm || showDeletePlanConfirm || !!selectedMeal || showLibrary;
+  useScrollLock(isAnyModalOpen);
+
   const autoPhase = useMemo(() => {
     const settings = nutritionSettings;
     const start = new Date(settings.startDate).getTime();
@@ -65,11 +74,6 @@ export default function Nutrition() {
   const today = getTodayStr();
   const dayData = days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
   
-  // Nutrition Settings Draft State
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsDraft, setSettingsDraft] = useState<NutritionSettings>(nutritionSettings);
-  const [inputMode, setInputMode] = useState<'grams' | 'percentage'>('grams');
-
   const hasSettingsChanges = useMemo(() => {
     return JSON.stringify(settingsDraft) !== JSON.stringify(nutritionSettings);
   }, [settingsDraft, nutritionSettings]);
@@ -151,6 +155,7 @@ export default function Nutrition() {
         }
 
         // Match Meal: 🌅 早餐① (08:00) | P:13 C:1 F:10 (Support optional -, decimals)
+        // [MODIFIED] Robust regex to support optional prefix and decimals
         const mealMatch = line.match(/^(?:-\s*)?(.+?)\s*\((.+?)\)\s*\|\s*P:([\d.]+)\s*C:([\d.]+)\s*F:([\d.]+)/);
         if (mealMatch && currentPhaseIdx !== -1 && currentDayType) {
           const [, name, time, p, c, f] = mealMatch;
@@ -245,7 +250,6 @@ export default function Nutrition() {
 
   const applySuggestedMeal = (meal: SuggestedMeal) => {
     const today = getTodayStr();
-    
     const newMeal: CustomMeal = {
       id: Math.random().toString(36).substr(2, 9),
       name: meal.name,
@@ -253,7 +257,7 @@ export default function Nutrition() {
       carbs: meal.carbs,
       fat: meal.fat,
       time: meal.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-      ingredients: meal.ingredients,
+      ingredients: meal.ingredients || [],
       updatedAt: Date.now()
     };
 
@@ -270,7 +274,7 @@ export default function Nutrition() {
         }
       };
     });
-    showToast(t("add" as any) + " " + meal.name);
+    showToast(`${t("add" as any)} ${meal.name}`);
   };
 
   const applyAllSuggestedMeals = () => {
@@ -633,10 +637,10 @@ export default function Nutrition() {
 
       {/* Nutrition Settings Modal (Replaces Ratio Editor) */}
       {showSettings && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 pb-24 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
-          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 max-h-[85vh] shadow-2xl flex flex-col overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 modal-mobile-dynamic shadow-2xl flex flex-col overflow-hidden">
             {/* Header */}
-            <div className="p-6 pb-4 border-b border-white/5 flex items-center justify-between">
+            <div className="p-6 pb-4 border-b border-white/5 flex items-center justify-between flex-shrink-0">
               <div className="space-y-1">
                 <h2 className="text-xl font-bold">{t("nutritionSettings")}</h2>
                 <div className="flex items-center gap-2">
@@ -650,13 +654,16 @@ export default function Nutrition() {
                   </button>
                 </div>
               </div>
-              <button onClick={() => setShowSettings(false)} className="text-white/40 hover:text-white">
+              <button 
+                onClick={() => setShowSettings(false)} 
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-white/40 hover:text-white transition-colors"
+              >
                 <X size={20} />
               </button>
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar min-h-0">
+            <div className="flex-1 modal-content-area p-6 space-y-6 no-scrollbar">
               {/* Plan Selection (Multi-Plan Support) */}
               {dietPlans.length > 0 && (
                 <div className="space-y-2">
@@ -879,7 +886,7 @@ export default function Nutrition() {
             </div>
 
             {/* Save Button (Footer) */}
-            <div className="p-6 pt-4 border-t border-white/5">
+            <div className="p-6 pt-4 border-t border-white/5 modal-footer-safe">
               <button 
                 onClick={handleSaveSettings}
                 disabled={!hasSettingsChanges}
@@ -1203,16 +1210,19 @@ export default function Nutrition() {
 
       {/* Add Meal Modal */}
       {showAddMeal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
-          <GlassCard className="w-full max-w-sm p-6 space-y-4 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 modal-mobile-dynamic flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-6 pb-4 border-b border-white/5 flex items-center justify-between flex-shrink-0">
               <h2 className="text-xl font-bold">{t("customMeal")}</h2>
-              <button onClick={() => setShowAddMeal(false)} className="text-white/40 hover:text-white">
+              <button 
+                onClick={() => setShowAddMeal(false)} 
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-white/40 hover:text-white transition-colors"
+              >
                 <X size={20} />
               </button>
             </div>
             
-            <div className="space-y-4">
+            <div className="flex-1 modal-content-area p-6 space-y-6">
               <div className="relative space-y-1">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("mealName")}</label>
                 <input 
@@ -1435,12 +1445,14 @@ export default function Nutrition() {
               </div>
             </div>
 
-            <button 
-              onClick={handleAddMeal}
-              className="w-full rounded-2xl bg-white py-4 font-bold text-black transition-transform active:scale-95"
-            >
-              {t("save")}
-            </button>
+            <div className="p-6 pt-2 flex-shrink-0 modal-footer-safe">
+              <button 
+                onClick={handleAddMeal}
+                className="w-full rounded-2xl bg-white py-4 font-bold text-black transition-transform active:scale-95 shadow-xl hover:bg-opacity-90"
+              >
+                {t("save")}
+              </button>
+            </div>
           </GlassCard>
         </div>
       )}
@@ -1504,15 +1516,15 @@ export default function Nutrition() {
 
       {/* Meal Detail Modal */}
       {selectedMeal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm backdrop-saturate-150 backdrop-contrast-90">
-          <GlassCard className="w-full max-w-sm p-6 space-y-6 border-white/20 bg-black/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <GlassCard className="w-full max-w-sm border-white/20 bg-black/90 modal-mobile-dynamic flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-6 pb-4 border-b border-white/5 flex items-center justify-between flex-shrink-0">
               {isEditingMeal ? (
                 <input 
                   type="text"
                   value={editingMealDraft?.name || ""}
                   onChange={(e) => setEditingMealDraft(prev => prev ? { ...prev, name: e.target.value } : null)}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-lg font-bold outline-none w-full mr-4"
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-lg font-bold outline-none w-full mr-4"
                 />
               ) : (
                 <h2 className="text-xl font-bold">{selectedMeal.name}</h2>
@@ -1541,220 +1553,222 @@ export default function Nutrition() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-2xl bg-white/5 p-4 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("time")}</p>
-                {isEditingMeal ? (
-                  <input 
-                    type="time"
-                    value={editingMealDraft?.time || ""}
-                    onChange={(e) => setEditingMealDraft(prev => prev ? { ...prev, time: e.target.value } : null)}
-                    className="mt-1 bg-transparent text-center text-lg font-bold outline-none w-full"
-                  />
-                ) : (
-                  <p className="mt-1 text-lg font-bold">{selectedMeal.time}</p>
-                )}
+            <div className="flex-1 modal-content-area p-6 space-y-6 no-scrollbar">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-2xl bg-white/5 p-4 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("time")}</p>
+                  {isEditingMeal ? (
+                    <input 
+                      type="time"
+                      value={editingMealDraft?.time || ""}
+                      onChange={(e) => setEditingMealDraft(prev => prev ? { ...prev, time: e.target.value } : null)}
+                      className="mt-1 bg-transparent text-center text-lg font-bold outline-none w-full"
+                    />
+                  ) : (
+                    <p className="mt-1 text-lg font-bold">{selectedMeal.time}</p>
+                  )}
+                </div>
+                <div className="rounded-2xl bg-white/5 p-4 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("calories")}</p>
+                  {isEditingMeal ? (
+                    <input 
+                      type="number"
+                      placeholder={calcCalories(editingMealDraft?.protein || 0, editingMealDraft?.carbs || 0, editingMealDraft?.fat || 0).toString()}
+                      value={editingMealDraft?.calories || ""}
+                      onChange={(e) => setEditingMealDraft(prev => prev ? { ...prev, calories: parseFloat(e.target.value) || undefined } : null)}
+                      className="mt-1 bg-transparent text-center text-lg font-bold outline-none w-full placeholder:text-white/20"
+                    />
+                  ) : (
+                    <p className="mt-1 text-lg font-bold">
+                      {selectedMeal.calories || calcCalories(selectedMeal.protein, selectedMeal.carbs, selectedMeal.fat)}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="rounded-2xl bg-white/5 p-4 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{t("calories")}</p>
-                {isEditingMeal ? (
-                  <input 
-                    type="number"
-                    placeholder={calcCalories(editingMealDraft?.protein || 0, editingMealDraft?.carbs || 0, editingMealDraft?.fat || 0).toString()}
-                    value={editingMealDraft?.calories || ""}
-                    onChange={(e) => setEditingMealDraft(prev => prev ? { ...prev, calories: parseFloat(e.target.value) || undefined } : null)}
-                    className="mt-1 bg-transparent text-center text-lg font-bold outline-none w-full placeholder:text-white/20"
-                  />
-                ) : (
-                  <p className="mt-1 text-lg font-bold">
-                    {selectedMeal.calories || calcCalories(selectedMeal.protein, selectedMeal.carbs, selectedMeal.fat)}
-                  </p>
-                )}
-              </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-2xl bg-white/5 p-3 text-center">
-                <p className="text-[8px] font-bold uppercase tracking-widest text-white/40">P</p>
-                {isEditingMeal ? (
-                  <p className="text-sm font-bold text-blue-400">
-                    {(editingMealDraft?.ingredients?.length || 0) > 0 
-                      ? editingMealDraft?.ingredients?.reduce((sum, ing) => sum + (Number(ing.p) || 0), 0).toFixed(1)
-                      : (editingMealDraft?.protein || 0).toFixed(1)}g
-                  </p>
-                ) : (
-                  <p className="text-sm font-bold text-blue-400">{selectedMeal.protein.toFixed(1)}g</p>
-                )}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-2xl bg-white/5 p-3 text-center">
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-white/40">P</p>
+                  {isEditingMeal ? (
+                    <p className="text-sm font-bold text-blue-400">
+                      {(editingMealDraft?.ingredients?.length || 0) > 0 
+                        ? editingMealDraft?.ingredients?.reduce((sum, ing) => sum + (Number(ing.p) || 0), 0).toFixed(1)
+                        : (editingMealDraft?.protein || 0).toFixed(1)}g
+                    </p>
+                  ) : (
+                    <p className="text-sm font-bold text-blue-400">{selectedMeal.protein.toFixed(1)}g</p>
+                  )}
+                </div>
+                <div className="rounded-2xl bg-white/5 p-3 text-center">
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-white/40">C</p>
+                  {isEditingMeal ? (
+                    <p className="text-sm font-bold text-green-400">
+                      {(editingMealDraft?.ingredients?.length || 0) > 0 
+                        ? editingMealDraft?.ingredients?.reduce((sum, ing) => sum + (Number(ing.c) || 0), 0).toFixed(1)
+                        : (editingMealDraft?.carbs || 0).toFixed(1)}g
+                    </p>
+                  ) : (
+                    <p className="text-sm font-bold text-green-400">{selectedMeal.carbs.toFixed(1)}g</p>
+                  )}
+                </div>
+                <div className="rounded-2xl bg-white/5 p-3 text-center">
+                  <p className="text-[8px] font-bold uppercase tracking-widest text-white/40">F</p>
+                  {isEditingMeal ? (
+                    <p className="text-sm font-bold text-yellow-400">
+                      {(editingMealDraft?.ingredients?.length || 0) > 0 
+                        ? editingMealDraft?.ingredients?.reduce((sum, ing) => sum + (Number(ing.f) || 0), 0).toFixed(1)
+                        : (editingMealDraft?.fat || 0).toFixed(1)}g
+                    </p>
+                  ) : (
+                    <p className="text-sm font-bold text-yellow-400">{selectedMeal.fat.toFixed(1)}g</p>
+                  )}
+                </div>
               </div>
-              <div className="rounded-2xl bg-white/5 p-3 text-center">
-                <p className="text-[8px] font-bold uppercase tracking-widest text-white/40">C</p>
-                {isEditingMeal ? (
-                  <p className="text-sm font-bold text-green-400">
-                    {(editingMealDraft?.ingredients?.length || 0) > 0 
-                      ? editingMealDraft?.ingredients?.reduce((sum, ing) => sum + (Number(ing.c) || 0), 0).toFixed(1)
-                      : (editingMealDraft?.carbs || 0).toFixed(1)}g
-                  </p>
-                ) : (
-                  <p className="text-sm font-bold text-green-400">{selectedMeal.carbs.toFixed(1)}g</p>
-                )}
-              </div>
-              <div className="rounded-2xl bg-white/5 p-3 text-center">
-                <p className="text-[8px] font-bold uppercase tracking-widest text-white/40">F</p>
-                {isEditingMeal ? (
-                  <p className="text-sm font-bold text-yellow-400">
-                    {(editingMealDraft?.ingredients?.length || 0) > 0 
-                      ? editingMealDraft?.ingredients?.reduce((sum, ing) => sum + (Number(ing.f) || 0), 0).toFixed(1)
-                      : (editingMealDraft?.fat || 0).toFixed(1)}g
-                  </p>
-                ) : (
-                  <p className="text-sm font-bold text-yellow-400">{selectedMeal.fat.toFixed(1)}g</p>
-                )}
-              </div>
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Ingredients</p>
-                {isEditingMeal && (
-                  <button 
-                    onClick={() => setEditingMealDraft(prev => {
-                      if (!prev) return null;
-                      const ings = [...(prev.ingredients || [])];
-                      ings.push({ n: "", a: "", p: 0, c: 0, f: 0 });
-                      return { ...prev, ingredients: ings };
-                    })}
-                    className="text-[10px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1"
-                  >
-                    <Plus size={10} /> Add
-                  </button>
-                )}
-              </div>
-              <div className="space-y-4 max-h-64 overflow-y-auto no-scrollbar">
-                {isEditingMeal ? (
-                  editingMealDraft?.ingredients?.map((ing, idx) => (
-                    <div key={idx} className="space-y-2 rounded-xl bg-white/5 p-3 border border-white/5">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="text"
-                          value={ing.n}
-                          placeholder="Name"
-                          onChange={(e) => setEditingMealDraft(prev => {
-                            if (!prev) return null;
-                            const ings = [...(prev.ingredients || [])];
-                            ings[idx] = { ...ings[idx], n: e.target.value };
-                            return { ...prev, ingredients: ings };
-                          })}
-                          className="flex-1 min-w-0 bg-transparent text-xs font-bold outline-none"
-                        />
-                        <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Ingredients</p>
+                  {isEditingMeal && (
+                    <button 
+                      onClick={() => setEditingMealDraft(prev => {
+                        if (!prev) return null;
+                        const ings = [...(prev.ingredients || [])];
+                        ings.push({ n: "", a: "", p: 0, c: 0, f: 0 });
+                        return { ...prev, ingredients: ings };
+                      })}
+                      className="text-[10px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                    >
+                      <Plus size={10} /> Add
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-4 max-h-64 overflow-y-auto no-scrollbar">
+                  {isEditingMeal ? (
+                    editingMealDraft?.ingredients?.map((ing, idx) => (
+                      <div key={idx} className="space-y-2 rounded-xl bg-white/5 p-3 border border-white/5">
+                        <div className="flex items-center gap-2">
                           <input 
                             type="text"
-                            inputMode="decimal"
-                            value={ing.a}
-                            placeholder="g"
+                            value={ing.n}
+                            placeholder="Name"
                             onChange={(e) => setEditingMealDraft(prev => {
                               if (!prev) return null;
                               const ings = [...(prev.ingredients || [])];
-                              ings[idx] = { ...ings[idx], a: e.target.value };
+                              ings[idx] = { ...ings[idx], n: e.target.value };
                               return { ...prev, ingredients: ings };
                             })}
-                            className="w-10 bg-white/5 rounded px-1 py-0.5 text-[10px] text-white/60 text-right outline-none"
+                            className="flex-1 min-w-0 bg-transparent text-xs font-bold outline-none"
                           />
-                          <span className="text-[8px] text-white/20">g</span>
-                        </div>
-                        <button 
-                          onClick={() => setEditingMealDraft(prev => {
-                            if (!prev) return null;
-                            const ings = (prev.ingredients || []).filter((_, i) => i !== idx);
-                            return { ...prev, ingredients: ings };
-                          })}
-                          className="text-red-400/60 hover:text-red-400"
-                        >
-                          <Minus size={14} />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="flex items-center gap-1 bg-white/5 rounded px-2 py-1">
-                          <span className="text-[8px] font-bold text-blue-400/60">P</span>
-                          <input 
-                            type="number"
-                            value={ing.p || ""}
-                            onChange={(e) => setEditingMealDraft(prev => {
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <input 
+                              type="text"
+                              inputMode="decimal"
+                              value={ing.a}
+                              placeholder="g"
+                              onChange={(e) => setEditingMealDraft(prev => {
+                                if (!prev) return null;
+                                const ings = [...(prev.ingredients || [])];
+                                ings[idx] = { ...ings[idx], a: e.target.value };
+                                return { ...prev, ingredients: ings };
+                              })}
+                              className="w-10 bg-white/5 rounded px-1 py-0.5 text-[10px] text-white/60 text-right outline-none"
+                            />
+                            <span className="text-[8px] text-white/20">g</span>
+                          </div>
+                          <button 
+                            onClick={() => setEditingMealDraft(prev => {
                               if (!prev) return null;
-                              const ings = [...(prev.ingredients || [])];
-                              ings[idx] = { ...ings[idx], p: parseFloat(e.target.value) || 0 };
+                              const ings = (prev.ingredients || []).filter((_, i) => i !== idx);
                               return { ...prev, ingredients: ings };
                             })}
-                            className="w-full bg-transparent text-[10px] font-bold outline-none text-center"
-                          />
+                            className="text-red-400/60 hover:text-red-400"
+                          >
+                            <Minus size={14} />
+                          </button>
                         </div>
-                        <div className="flex items-center gap-1 bg-white/5 rounded px-2 py-1">
-                          <span className="text-[8px] font-bold text-green-400/60">C</span>
-                          <input 
-                            type="number"
-                            value={ing.c || ""}
-                            onChange={(e) => setEditingMealDraft(prev => {
-                              if (!prev) return null;
-                              const ings = [...(prev.ingredients || [])];
-                              ings[idx] = { ...ings[idx], c: parseFloat(e.target.value) || 0 };
-                              return { ...prev, ingredients: ings };
-                            })}
-                            className="w-full bg-transparent text-[10px] font-bold outline-none text-center"
-                          />
-                        </div>
-                        <div className="flex items-center gap-1 bg-white/5 rounded px-2 py-1">
-                          <span className="text-[8px] font-bold text-yellow-400/60">F</span>
-                          <input 
-                            type="number"
-                            value={ing.f || ""}
-                            onChange={(e) => setEditingMealDraft(prev => {
-                              if (!prev) return null;
-                              const ings = [...(prev.ingredients || [])];
-                              ings[idx] = { ...ings[idx], f: parseFloat(e.target.value) || 0 };
-                              return { ...prev, ingredients: ings };
-                            })}
-                            className="w-full bg-transparent text-[10px] font-bold outline-none text-center"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  selectedMeal.ingredients && selectedMeal.ingredients.length > 0 ? (
-                    selectedMeal.ingredients.map((ing, idx) => (
-                      <div key={idx} className="rounded-xl bg-white/5 p-3 space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold">{ing.n}</span>
-                          <span className="text-white/40">{ing.a}g</span>
-                        </div>
-                        <div className="flex gap-2 text-[8px] font-bold text-white/20">
-                          <span>P: {ing.p}g</span>
-                          <span>C: {ing.c}g</span>
-                          <span>F: {ing.f}g</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="flex items-center gap-1 bg-white/5 rounded px-2 py-1">
+                            <span className="text-[8px] font-bold text-blue-400/60">P</span>
+                            <input 
+                              type="number"
+                              value={ing.p || ""}
+                              onChange={(e) => setEditingMealDraft(prev => {
+                                if (!prev) return null;
+                                const ings = [...(prev.ingredients || [])];
+                                ings[idx] = { ...ings[idx], p: parseFloat(e.target.value) || 0 };
+                                return { ...prev, ingredients: ings };
+                              })}
+                              className="w-full bg-transparent text-[10px] font-bold outline-none text-center"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1 bg-white/5 rounded px-2 py-1">
+                            <span className="text-[8px] font-bold text-green-400/60">C</span>
+                            <input 
+                              type="number"
+                              value={ing.c || ""}
+                              onChange={(e) => setEditingMealDraft(prev => {
+                                if (!prev) return null;
+                                const ings = [...(prev.ingredients || [])];
+                                ings[idx] = { ...ings[idx], c: parseFloat(e.target.value) || 0 };
+                                return { ...prev, ingredients: ings };
+                              })}
+                              className="w-full bg-transparent text-[10px] font-bold outline-none text-center"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1 bg-white/5 rounded px-2 py-1">
+                            <span className="text-[8px] font-bold text-yellow-400/60">F</span>
+                            <input 
+                              type="number"
+                              value={ing.f || ""}
+                              onChange={(e) => setEditingMealDraft(prev => {
+                                if (!prev) return null;
+                                const ings = [...(prev.ingredients || [])];
+                                ings[idx] = { ...ings[idx], f: parseFloat(e.target.value) || 0 };
+                                return { ...prev, ingredients: ings };
+                              })}
+                              className="w-full bg-transparent text-[10px] font-bold outline-none text-center"
+                            />
+                          </div>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-center py-4 text-xs text-white/20 italic">No ingredients listed</p>
-                  )
-                )}
+                    selectedMeal.ingredients && selectedMeal.ingredients.length > 0 ? (
+                      selectedMeal.ingredients.map((ing, idx) => (
+                        <div key={idx} className="rounded-xl bg-white/5 p-3 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold">{ing.n}</span>
+                            <span className="text-white/40">{ing.a}g</span>
+                          </div>
+                          <div className="flex gap-2 text-[8px] font-bold text-white/20">
+                            <span>P: {ing.p}g</span>
+                            <span>C: {ing.c}g</span>
+                            <span>F: {ing.f}g</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center py-4 text-xs text-white/20 italic">No ingredients listed</p>
+                    )
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="p-6 pt-2 border-t border-white/5 flex gap-3 flex-shrink-0 bg-white/[0.02] backdrop-blur-xl modal-footer-safe">
               {isEditingMeal ? (
                 <>
                   <button 
                     onClick={() => setIsEditingMeal(false)}
                     className="flex-1 rounded-2xl bg-white/5 py-4 font-bold text-white transition-transform active:scale-95"
                   >
-                    Cancel
+                    {t("cancel" as any) || "Cancel"}
                   </button>
                   <button 
                     onClick={handleUpdateMeal}
                     className="flex-1 rounded-2xl bg-purple-500 py-4 font-bold text-white transition-transform active:scale-95 shadow-lg shadow-purple-500/20"
                   >
-                    Save Changes
+                    {t("save" as any) || "Save"}
                   </button>
                 </>
               ) : (
