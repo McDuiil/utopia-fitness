@@ -3,7 +3,7 @@ import { Plus, Clock, ChevronRight, PieChart, Utensils, X, Calendar, Zap, Settin
 import GlassCard from "./GlassCard";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useScrollLock } from "../hooks/useScrollLock";
-import { CustomMeal, NutritionSettings, MacroGrams, DayTypeConfig, FoodItem, DietTemplate, SuggestedMeal, Ingredient } from "@/src/types";
+import { CustomMeal, NutritionSettings, MacroGrams, DayTypeConfig, FoodItem, DietTemplate, SuggestedMeal, Ingredient } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { getTodayStr, calcCalories } from "../lib/utils";
 
