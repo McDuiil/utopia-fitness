@@ -1,7 +1,7 @@
 import { LayoutDashboard, Dumbbell, Utensils, User } from "lucide-react";
-import { cn } from "@/src/lib/utils";
+import { cn } from "../lib/utils";
 import { motion } from "motion/react";
-import { useApp } from "@/src/context/AppContext";
+import { useApp } from "../context/AppContext";
 
 type Tab = "dashboard" | "workouts" | "nutrition" | "profile";
 
