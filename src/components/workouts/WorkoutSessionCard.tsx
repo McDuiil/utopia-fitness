@@ -49,6 +49,7 @@ const WorkoutSessionCard = memo(({
   return (
     <motion.div
       layout
+      id={`session-${session.id}`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
@@ -62,7 +63,7 @@ const WorkoutSessionCard = memo(({
       className="w-full"
     >
       <GlassCard 
-        className={`p-4 relative group overflow-hidden transition-colors ${
+        className={`p-4 relative group transition-colors !overflow-visible ${
           isPlanned ? 'border-blue-500/20 bg-blue-500/5' : 'border-white/5 bg-white/[0.02]'
         } ${isExpanded ? 'ring-1 ring-blue-500/30' : ''}`}
       >
@@ -134,7 +135,8 @@ const WorkoutSessionCard = memo(({
                         initial={{ opacity: 0, scale: 0.9, y: -10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.9, y: -10 }}
-                        className="absolute right-0 top-full mt-2 z-[140] w-32 rounded-xl bg-gray-900 border border-white/10 p-1 shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-full mt-2 z-[140] w-32 rounded-xl bg-[#121212] border border-white/10 p-1 shadow-2xl menu-no-pierce"
                       >
                         <button 
                           onClick={(e) => {
@@ -173,8 +175,12 @@ const WorkoutSessionCard = memo(({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
+              onAnimationComplete={() => {
+                if (isExpanded) {
+                  document.getElementById(`session-${session.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+              }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="overflow-hidden"
             >
               <div className="pt-4 mt-4 border-t border-white/5 space-y-3">
                 {session.exercises.map((ex, i) => {
