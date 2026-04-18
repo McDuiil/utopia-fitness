@@ -20,8 +20,8 @@ export default function Navigation({ activeTab, setActiveTab }: NavigationProps)
   ];
 
   return (
-    <div className="fixed bottom-8 left-1/2 z-50 w-[90%] max-w-md -translate-x-1/2">
-      <div className="glass-weak flex items-center justify-around p-1.5 shadow-2xl">
+    <div className="fixed bottom-8 left-1/2 z-[80] w-[90%] max-w-md -translate-x-1/2">
+      <div className="glass-weak flex items-center justify-around p-1.5 shadow-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
