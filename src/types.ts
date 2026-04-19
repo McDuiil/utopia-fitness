@@ -1,8 +1,10 @@
 export type Language = 'en' | 'zh';
 export type Theme = 'dark' | 'light';
+export type Tab = "dashboard" | "workouts" | "nutrition" | "profile";
 
 export interface Profile {
   nickname: string;
+  name?: string; // Added to support user's request for .name
   avatar: string;
   gender: 'male' | 'female';
   age: number;
@@ -12,6 +14,7 @@ export interface Profile {
   goalWeight: number;
   goalDeficit: number;
   goalBodyFat: number;
+  goalSteps?: number;
   useCustomBMR: boolean;
   customBMR: number;
   customCalorieGoal?: number;
@@ -135,10 +138,12 @@ export interface DayData {
   water: number;
   weight?: number;
   bodyFat?: number;
+  done?: boolean;
   meals: CustomMeal[];
   workoutSessions: WorkoutSession[];
   manualDayType?: 'training' | 'rest';
   manualCarbDay?: 'high' | 'medium' | 'low';
+  mode?: 'standard' | 'carb-cycling' | 'cut-phases';
 }
 
 export interface SyncSettings {
