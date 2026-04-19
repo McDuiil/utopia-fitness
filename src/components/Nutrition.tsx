@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from "react";
-import { Plus, Clock, ChevronRight, PieChart, Utensils, X, Calendar, Zap, Settings, Save, RefreshCw, Lock, Unlock, Search, Info, FileUp, Sparkles, Check, Trash2, Edit2, Minus } from "lucide-react";
+import { Plus, Clock, ChevronRight, PieChart, Utensils, X, Calendar, Zap, Settings, Save, RefreshCw, Lock, Unlock, Search, Info, FileUp, Sparkles, Check, Trash2, Edit2, Minus, History } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useScrollLock } from "../hooks/useScrollLock";
+import { useDietIntelligence } from "../hooks/useDietIntelligence";
 import { CustomMeal, NutritionSettings, MacroGrams, DayTypeConfig, FoodItem, DietTemplate, SuggestedMeal, Ingredient } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { getTodayStr, calcCalories } from "../lib/utils";
@@ -48,6 +49,9 @@ export default function Nutrition() {
   const [isEditingMeal, setIsEditingMeal] = useState(false);
   const [editingMealDraft, setEditingMealDraft] = useState<CustomMeal | null>(null);
   const [isPhaseReminderDismissed, setIsPhaseReminderDismissed] = useState(false);
+  const [suggestionSource, setSuggestionSource] = useState<'official' | 'history'>('official');
+
+  const { officialSuggestions, historySuggestions } = useDietIntelligence();
 
   const [showSettings, setShowSettings] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<NutritionSettings>(nutritionSettings);
@@ -261,6 +265,9 @@ export default function Nutrition() {
       updatedAt: Date.now()
     };
 
+    const currentCarbDay = resolvedNutritionToday.metadata.currentCarbDay;
+    const currentDayType = resolvedNutritionToday.metadata.currentDayType;
+
     setAppData(prev => {
       const dayData = prev.days[today] || { date: today, steps: 0, water: 0, meals: [], workoutSessions: [] };
       return {
@@ -269,11 +276,22 @@ export default function Nutrition() {
           ...prev.days,
           [today]: {
             ...dayData,
+            mode: prev.nutritionSettings.mode, 
+            manualCarbDay: currentCarbDay,
+            manualDayType: currentDayType,
             meals: [...(dayData.meals || []), newMeal]
           }
         }
       };
     });
+    
+    // Auto-trigger editing modal for the new meal (UI Requirement: "录入即编辑")
+    setTimeout(() => {
+      setSelectedMeal(newMeal);
+      setEditingMealDraft({ ...newMeal });
+      setIsEditingMeal(true);
+    }, 100);
+
     showToast(`${t("add" as any)} ${meal.name}`);
   };
 
@@ -455,6 +473,9 @@ export default function Nutrition() {
       deleted: false
     };
 
+    const currentCarbDay = resolvedNutritionToday.metadata.currentCarbDay;
+    const currentDayType = resolvedNutritionToday.metadata.currentDayType;
+
     setAppData(prev => {
       const existingFood = prev.foodLibrary.find(f => f.name.toLowerCase() === newMeal.name.toLowerCase());
       
@@ -483,6 +504,9 @@ export default function Nutrition() {
           ...prev.days,
           [today]: {
             ...dayData,
+            mode: prev.nutritionSettings.mode, 
+            manualCarbDay: currentCarbDay,
+            manualDayType: currentDayType,
             meals: [...(dayData.meals || []), meal]
           }
         }
@@ -526,6 +550,9 @@ export default function Nutrition() {
       updatedAt: Date.now()
     };
     
+    const currentCarbDay = resolvedNutritionToday.metadata.currentCarbDay;
+    const currentDayType = resolvedNutritionToday.metadata.currentDayType;
+
     setAppData(prev => {
       const dayData = prev.days[today];
       if (!dayData) return prev;
@@ -536,6 +563,9 @@ export default function Nutrition() {
           ...prev.days,
           [today]: {
             ...dayData,
+            mode: dayData.mode || prev.nutritionSettings.mode, 
+            manualCarbDay: dayData.manualCarbDay || currentCarbDay,
+            manualDayType: dayData.manualDayType || currentDayType,
             meals: dayData.meals.map(m => 
               m.id === finalDraft.id ? finalDraft : m
             )
@@ -567,6 +597,9 @@ export default function Nutrition() {
           ...prev.days,
           [tomorrowStr]: {
             ...tomorrowData,
+            mode: prev.nutritionSettings.mode, 
+            manualCarbDay: resolvedNutritionToday.metadata.currentCarbDay, // 复制时带上当前的碳水属性
+            manualDayType: resolvedNutritionToday.metadata.currentDayType,
             meals: [...(tomorrowData.meals || []), ...(todayData.meals || [])]
           }
         }
@@ -988,26 +1021,34 @@ export default function Nutrition() {
         </GlassCard>
 
         {/* Suggestion Shelf */}
-        {nutritionSettings.mode === 'cut-phases' && dietPlans.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
+        <div className="space-y-3">
+          <div className="flex flex-col gap-4 px-1">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles size={14} className="text-purple-400" />
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/60">
-                  {nutritionSettings.mode === 'cut-phases' ? (
-                    `${t("phase")} ${resolvedNutritionToday.metadata.currentPhase + 1} ${t("suggestions" as any) || "Suggestions"}`
+                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-purple-500/20 text-purple-400">
+                  <Sparkles size={14} />
+                </div>
+                <h3 className="text-[11px] font-bold uppercase tracking-widest text-white/60">
+                  {suggestionSource === 'official' ? (
+                    nutritionSettings.mode === 'cut-phases' ? (
+                      `${t("phase")} ${resolvedNutritionToday.metadata.currentPhase + 1} ${t("suggestions" as any) || "Suggestions"}`
+                    ) : (
+                      t("suggestions" as any) || "Suggestions"
+                    )
                   ) : (
-                    t("suggestions" as any) || "Suggestions"
+                    "My History Recommendations"
                   )}
                 </h3>
               </div>
               <div className="flex gap-2">
-                <button 
-                  onClick={applyAllSuggestedMeals}
-                  className="text-[10px] font-bold uppercase px-2 py-1 rounded-lg bg-white/[0.06] text-white/40 hover:bg-white/[0.08]"
-                >
-                  {t("mirrorAll" as any) || "Mirror All"}
-                </button>
+                {suggestionSource === 'official' && officialSuggestions.length > 0 && (
+                  <button 
+                    onClick={applyAllSuggestedMeals}
+                    className="text-[10px] font-bold uppercase px-2 py-1 rounded-lg bg-white/[0.06] text-white/40 hover:bg-white/[0.08]"
+                  >
+                    {t("mirrorAll" as any) || "Mirror All"}
+                  </button>
+                )}
                 <button 
                   onClick={() => {
                     setIsMergeMode(!isMergeMode);
@@ -1022,13 +1063,50 @@ export default function Nutrition() {
               </div>
             </div>
 
-            <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar flex-nowrap">
+            {/* Source Tabs */}
+            <div className="flex gap-2 p-1 rounded-xl bg-white/[0.04] w-fit">
+              <button 
+                onClick={() => setSuggestionSource('official')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${suggestionSource === 'official' ? 'bg-white text-black shadow-lg' : 'text-white/20 hover:text-white/40'}`}
+              >
+                <Sparkles size={12} />
+                {t("official" as any) || "Official"}
+              </button>
+              <button 
+                onClick={() => setSuggestionSource('history')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${suggestionSource === 'history' ? 'bg-white text-black shadow-lg' : 'text-white/20 hover:text-white/40'}`}
+              >
+                <History size={12} />
+                {t("myHistory" as any) || "My History"}
+              </button>
+            </div>
+          </div>
+
+          <div className="px-4">
+            <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar flex-nowrap min-h-[120px] snap-x snap-mandatory">
               {(() => {
-                const activePlan = dietPlans.find(p => p.id === activeDietPlanId) || dietPlans[0];
-                const template = activePlan?.templates.find(t => t.phase === resolvedNutritionToday.metadata.currentPhase);
-                const meals = resolvedNutritionToday.metadata.currentDayType === 'training' ? template?.trainingMeals : template?.restMeals;
+                const meals = suggestionSource === 'official' ? officialSuggestions : historySuggestions;
                 
-                return meals?.map((meal) => (
+                if (!meals || meals.length === 0) {
+                  return (
+                    <div className="w-full flex flex-col items-center justify-center py-8 text-white/10 border border-dashed border-white/5 rounded-3xl bg-white/[0.02]">
+                      <Search size={24} className="mb-2 opacity-20" />
+                      <p className="text-[11px] font-medium italic">
+                        {suggestionSource === 'official' ? "No official diet plan active" : "No suitable history meals found"}
+                      </p>
+                      {suggestionSource === 'official' && (
+                        <button 
+                          onClick={() => setShowImport(true)}
+                          className="mt-2 text-[9px] font-bold text-purple-400 uppercase tracking-widest hover:text-purple-300"
+                        >
+                          + {t("importPlan" as any)}
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
+                return meals.map((meal) => (
                   <button
                     key={meal.id}
                     onClick={() => {
@@ -1040,31 +1118,41 @@ export default function Nutrition() {
                         applySuggestedMeal(meal);
                       }
                     }}
-                    className={`relative flex-shrink-0 w-32 rounded-2xl p-4 border transition-all active:scale-95 ${
+                    className={`relative flex-shrink-0 w-[82vw] sm:w-40 rounded-3xl p-5 border transition-all active:scale-95 snap-center ${
                       selectedSuggestions.includes(meal.id) 
-                        ? "bg-purple-500/20 border-purple-500/50" 
-                        : "bg-white/[0.06] border-white/5 hover:bg-white/[0.08]"
+                        ? "bg-purple-500/20 border-purple-500/50 ring-1 ring-purple-500/20" 
+                        : "bg-white/[0.06] border-white/5 hover:bg-white/[0.08] hover:border-white/10"
                     }`}
                   >
-                    <div className="flex flex-col items-center text-center space-y-2">
-                      <div className="space-y-0.5">
-                        <p className="text-[10px] font-bold text-white line-clamp-2 h-6 flex items-center justify-center">{meal.name}</p>
-                        <p className="text-[8px] text-white/40 font-mono">{meal.time}</p>
+                    <div className="flex flex-col items-center text-center space-y-3">
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-bold text-white line-clamp-2 h-8 flex items-center justify-center leading-tight tracking-tight">{meal.name}</p>
+                        <div className="flex items-center justify-center gap-1 text-[9px] text-white/20 font-mono">
+                          <Clock size={10} />
+                          {meal.time}
+                        </div>
                       </div>
-                      <div className="flex gap-1 text-[8px] font-bold text-white/60">
-                        <span>P:{meal.protein}</span>
-                        <span>C:{meal.carbs}</span>
+                      <div className="flex gap-2 text-[9px] font-bold px-3 py-1 rounded-full bg-black/20">
+                        <span className="text-blue-400">P:{Math.round(meal.protein)}</span>
+                        <span className="text-green-400">C:{Math.round(meal.carbs)}</span>
+                        <span className="text-yellow-400">F:{Math.round(meal.fat)}</span>
                       </div>
                     </div>
                     {selectedSuggestions.includes(meal.id) && (
-                      <div className="absolute top-2 right-2 h-4 w-4 rounded-full bg-purple-500 flex items-center justify-center">
-                        <Check size={10} className="text-white" />
+                      <div className="absolute top-3 right-3 h-5 w-5 rounded-full bg-purple-500 flex items-center justify-center shadow-lg">
+                        <Check size={12} className="text-white" />
+                      </div>
+                    )}
+                    {suggestionSource === 'history' && (
+                      <div className="absolute top-3 left-3 opacity-20">
+                        <History size={12} />
                       </div>
                     )}
                   </button>
                 ));
               })()}
             </div>
+          </div>
 
             {isMergeMode && selectedSuggestions.length > 0 && (
               <motion.button
@@ -1077,8 +1165,7 @@ export default function Nutrition() {
               </motion.button>
             )}
           </div>
-        )}
-      </div>
+        </div>
 
       {/* Macros Summary */}
       <div className="px-4">
